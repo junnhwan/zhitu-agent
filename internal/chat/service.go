@@ -3,25 +3,36 @@ package chat
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/cloudwego/eino-ext/components/model/qwen"
 	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
+	"github.com/zhitu-agent/zhitu-agent/internal/memory"
 	"github.com/zhitu-agent/zhitu-agent/internal/rag"
+	ztool "github.com/zhitu-agent/zhitu-agent/internal/tool"
 )
 
 // Service implements the core chat logic, mirroring Java AiChat + AiChatService.
-// It loads system prompt, calls Qwen ChatModel, and integrates RAG retrieval.
+// It loads system prompt, calls Qwen ChatModel, integrates RAG retrieval,
+// manages session memory, and handles tool calls.
 type Service struct {
-	chatModel    model.ChatModel
-	systemPrompt string
-	rag          *rag.RAG
+	chatModel     model.ChatModel
+	systemPrompt  string
+	rag           *rag.RAG
 	docsPath     string
+	redisClient  *redis.Client
+	memoryCfg    *config.ChatMemoryConfig
+	compressor   *memory.TokenCountCompressor
+	toolInfos    []*schema.ToolInfo
+	toolMap      map[string]tool.InvokableTool
 }
 
 // NewService creates a ChatService with the given Qwen chat model and optional RAG.
@@ -44,23 +55,135 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {
 		return nil, fmt.Errorf("failed to load system prompt: %w", err)
 	}
 
+	// Create Redis client for memory (same config as RAG Redis)
+	redisAddr := fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port)
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     redisAddr,
+		Password: cfg.Redis.Password,
+		DB:       0,
+	})
+
+	// Create compressor
+	compressor := memory.NewTokenCountCompressor(
+		cfg.ChatMemory.Compression.RecentRounds,
+		cfg.ChatMemory.Compression.RecentTokenLimit,
+	)
+
+	// Create tools
+	toolInfos, toolMap, err := createTools(cfg, r)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tools: %w", err)
+	}
+
+	// Bind tools to chat model
+	if len(toolInfos) > 0 {
+		if err := chatModel.BindTools(toolInfos); err != nil {
+			return nil, fmt.Errorf("failed to bind tools: %w", err)
+		}
+		log.Printf("[ChatService] bound %d tools to chat model", len(toolInfos))
+	}
+
 	return &Service{
 		chatModel:    chatModel,
 		systemPrompt: systemPrompt,
 		rag:          r,
 		docsPath:     cfg.RAG.DocsPath,
+		redisClient:  rdb,
+		memoryCfg:    &cfg.ChatMemory,
+		compressor:   compressor,
+		toolInfos:    toolInfos,
+		toolMap:      toolMap,
 	}, nil
+}
+
+// createTools creates all tool instances and returns their ToolInfo list and a name→tool map.
+func createTools(cfg *config.Config, r *rag.RAG) ([]*schema.ToolInfo, map[string]tool.InvokableTool, error) {
+	toolMap := make(map[string]tool.InvokableTool)
+	var toolInfos []*schema.ToolInfo
+	bgCtx := context.Background()
+
+	// TimeTool
+	timeTool, err := ztool.NewTimeTool()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create time tool: %w", err)
+	}
+	timeInfo, _ := timeTool.Info(bgCtx)
+	toolInfos = append(toolInfos, timeInfo)
+	toolMap[timeInfo.Name] = timeTool
+
+	// EmailTool
+	emailTool, err := ztool.NewEmailTool(&cfg.Mail)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create email tool: %w", err)
+	}
+	emailInfo, _ := emailTool.Info(bgCtx)
+	toolInfos = append(toolInfos, emailInfo)
+	toolMap[emailInfo.Name] = emailTool
+
+	// RagTool
+	ragTool, err := ztool.NewRagTool(r, cfg.RAG.DocsPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create rag tool: %w", err)
+	}
+	ragInfo, _ := ragTool.Info(bgCtx)
+	toolInfos = append(toolInfos, ragInfo)
+	toolMap[ragInfo.Name] = ragTool
+
+	return toolInfos, toolMap, nil
+}
+
+// getMemory returns the CompressibleMemory for the given session.
+func (s *Service) getMemory(sessionID int64) *memory.CompressibleMemory {
+	return memory.NewCompressibleMemory(sessionID, s.redisClient, s.memoryCfg, s.compressor)
 }
 
 // Chat corresponds to Java aiChat.chat(sessionId, prompt).
 // Returns the AI reply as plain text.
+// Handles tool call loop: model may return tool_calls → execute → feed back → repeat.
 func (s *Service) Chat(ctx context.Context, sessionID int64, prompt string) (string, error) {
-	messages := s.buildMessages(ctx, prompt)
+	mem := s.getMemory(sessionID)
+	messages := s.buildMessages(ctx, mem, prompt)
+
+	// Add user message to memory
+	mem.Add(ctx, schema.UserMessage(prompt))
 
 	resp, err := s.chatModel.Generate(ctx, messages)
 	if err != nil {
 		return "", fmt.Errorf("chat model generate failed: %w", err)
 	}
+
+	// Handle tool calls in a loop
+	maxIterations := 10
+	for i := 0; i < maxIterations; i++ {
+		if len(resp.ToolCalls) == 0 {
+			break
+		}
+
+		// Add assistant message with tool calls to messages
+		messages = append(messages, resp)
+
+		// Execute each tool call
+		for _, tc := range resp.ToolCalls {
+			toolResult, err := s.executeToolCall(ctx, tc)
+			if err != nil {
+				log.Printf("[ChatService] tool %s execution failed: %v", tc.Function.Name, err)
+				toolResult = fmt.Sprintf("工具调用失败: %v", err)
+			}
+
+			// Add tool result message
+			messages = append(messages, schema.ToolMessage(toolResult, tc.ID,
+				schema.WithToolName(tc.Function.Name)))
+		}
+
+		// Call model again with tool results
+		resp, err = s.chatModel.Generate(ctx, messages)
+		if err != nil {
+			return "", fmt.Errorf("chat model generate (tool follow-up) failed: %w", err)
+		}
+	}
+
+	// Add assistant response to memory
+	mem.Add(ctx, resp)
 
 	return resp.Content, nil
 }
@@ -68,20 +191,34 @@ func (s *Service) Chat(ctx context.Context, sessionID int64, prompt string) (str
 // StreamChat corresponds to Java aiChat.streamChat(sessionId, prompt).
 // Returns a StreamReader of message chunks for SSE streaming.
 func (s *Service) StreamChat(ctx context.Context, sessionID int64, prompt string) (*schema.StreamReader[*schema.Message], error) {
-	messages := s.buildMessages(ctx, prompt)
+	mem := s.getMemory(sessionID)
+	messages := s.buildMessages(ctx, mem, prompt)
+
+	// Add user message to memory
+	mem.Add(ctx, schema.UserMessage(prompt))
 
 	stream, err := s.chatModel.Stream(ctx, messages)
 	if err != nil {
 		return nil, fmt.Errorf("chat model stream failed: %w", err)
 	}
 
+	// Note: tool call handling in streaming mode is complex.
+	// For now, stream directly. Tool call support in streaming will be enhanced in Phase 5.
 	return stream, nil
 }
 
-// buildMessages constructs the message list with system prompt, optional RAG context, and user message.
-func (s *Service) buildMessages(ctx context.Context, prompt string) []*schema.Message {
+// buildMessages constructs the message list with system prompt, memory, optional RAG context, and user message.
+func (s *Service) buildMessages(ctx context.Context, mem *memory.CompressibleMemory, prompt string) []*schema.Message {
 	messages := []*schema.Message{
 		schema.SystemMessage(s.systemPrompt),
+	}
+
+	// Add memory messages
+	if mem != nil {
+		history := mem.GetMessages(ctx)
+		if len(history) > 0 {
+			messages = append(messages, history...)
+		}
 	}
 
 	// RAG retrieval: inject relevant knowledge before user message
@@ -109,6 +246,19 @@ func (s *Service) buildMessages(ctx context.Context, prompt string) []*schema.Me
 
 	messages = append(messages, schema.UserMessage(prompt))
 	return messages
+}
+
+// executeToolCall runs a single tool call and returns the result string.
+func (s *Service) executeToolCall(ctx context.Context, tc schema.ToolCall) (string, error) {
+	t, ok := s.toolMap[tc.Function.Name]
+	if !ok {
+		return "", fmt.Errorf("unknown tool: %s", tc.Function.Name)
+	}
+	result, err := t.InvokableRun(ctx, tc.Function.Arguments)
+	if err != nil {
+		return "", fmt.Errorf("tool execution error: %w", err)
+	}
+	return result, nil
 }
 
 // InsertKnowledge writes a Q&A pair to a markdown file and ingests it into the vector store.
