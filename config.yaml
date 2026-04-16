@@ -1,0 +1,60 @@
+server:
+  port: 10010
+  context_path: /api
+
+redis:
+  host: "127.0.0.1"
+  port: 6379
+  password: ""
+  ttl: 3600
+
+dashscope:
+  api_key: ""
+  chat_model: "qwen-max"
+  embedding_model: "text-embedding-v3"
+  embedding_dimensions: 1024
+  rerank_model: "qwen3-rerank"
+
+rag:
+  docs_path: "./docs"
+  retrieve_top_k: 3
+  base_retriever:
+    max_results: 30
+    min_score: 0.55
+  rerank:
+    final_top_n: 5
+
+mail:
+  host: "smtp.qq.com"
+  port: 587
+  username: ""
+  password: ""
+
+bigmodel:
+  api_key: ""
+
+chat_memory:
+  max_messages: 20
+  compression:
+    token_threshold: 6000
+    recent_rounds: 5
+    recent_token_limit: 2000
+    summary_token_limit: 500
+    summary_prompt: "请将以下对话历史压缩为简洁摘要，严格控制在{tokenLimit} tokens以内，必须保留用户偏好、重要决策、核心诉求等关键信息，去除无意义寒暄：\n{messages}"
+    fallback_recent_rounds: 10
+  redis:
+    ttl_seconds: 3600
+    lock:
+      expire_seconds: 5
+      retry_times: 3
+      retry_interval_ms: 100
+
+rerank:
+  test:
+    enabled: false
+
+monitoring:
+  prometheus:
+    enabled: true
+  grafana:
+    enabled: true
