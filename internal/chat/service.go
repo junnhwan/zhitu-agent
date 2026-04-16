@@ -14,6 +14,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/zhitu-agent/zhitu-agent/internal/agent"
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
 	"github.com/zhitu-agent/zhitu-agent/internal/memory"
 	"github.com/zhitu-agent/zhitu-agent/internal/rag"
@@ -33,6 +34,7 @@ type Service struct {
 	compressor   *memory.TokenCountCompressor
 	toolInfos    []*schema.ToolInfo
 	toolMap      map[string]tool.InvokableTool
+	orchestrator *agent.SimpleOrchestrator
 }
 
 // NewService creates a ChatService with the given Qwen chat model and optional RAG.
@@ -94,6 +96,15 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {
 		toolInfos:    toolInfos,
 		toolMap:      toolMap,
 	}, nil
+}
+
+// InitOrchestrator initializes the multi-agent orchestrator.
+// Called after Service creation to avoid circular dependency.
+func (s *Service) InitOrchestrator() {
+	knowledgeAgent := agent.NewKnowledgeAgent(s.rag)
+	reasoningAgent := agent.NewReasoningAgent(s.Chat)
+	s.orchestrator = agent.NewSimpleOrchestrator(knowledgeAgent, reasoningAgent)
+	log.Printf("[ChatService] orchestrator initialized")
 }
 
 // createTools creates all tool instances and returns their ToolInfo list and a name→tool map.
@@ -205,6 +216,18 @@ func (s *Service) StreamChat(ctx context.Context, sessionID int64, prompt string
 	// Note: tool call handling in streaming mode is complex.
 	// For now, stream directly. Tool call support in streaming will be enhanced in Phase 5.
 	return stream, nil
+}
+
+// MultiAgentChat corresponds to Java simpleOrchestrator.process(sessionId, prompt).
+// Uses the orchestrator to coordinate KnowledgeAgent and ReasoningAgent.
+func (s *Service) MultiAgentChat(ctx context.Context, sessionID int64, prompt string) (string, error) {
+	if s.orchestrator == nil {
+		// Fallback to normal chat if orchestrator not initialized
+		return s.Chat(ctx, sessionID, prompt)
+	}
+
+	result := s.orchestrator.Process(ctx, sessionID, prompt)
+	return result, nil
 }
 
 // buildMessages constructs the message list with system prompt, memory, optional RAG context, and user message.

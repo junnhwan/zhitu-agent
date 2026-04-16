@@ -50,6 +50,9 @@ func main() {
 		log.Fatalf("Failed to initialize chat service: %v", err)
 	}
 
+	// 3.1 Initialize orchestrator for multi-agent chat
+	chatService.InitOrchestrator()
+
 	// 4. Setup Gin router
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)

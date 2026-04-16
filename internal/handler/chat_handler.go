@@ -101,7 +101,6 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 }
 
 // MultiAgentChat handles POST /api/multiAgentChat — returns plain text on success.
-// Currently delegates to Chat; orchestrator integration will be added in Phase 4.
 // Mirrors Java: simpleOrchestrator.process(sessionId, prompt)
 func (h *ChatHandler) MultiAgentChat(c *gin.Context) {
 	var req model.ChatRequest
@@ -113,9 +112,8 @@ func (h *ChatHandler) MultiAgentChat(c *gin.Context) {
 	c.Set("user_id", req.UserID)
 	c.Set("session_id", req.SessionID)
 
-	// Phase 4 will replace this with orchestrator.Process()
 	ctx := c.Request.Context()
-	result, err := h.chatService.Chat(ctx, req.SessionID, req.Prompt)
+	result, err := h.chatService.MultiAgentChat(ctx, req.SessionID, req.Prompt)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, common.Error(common.AIModelError, err.Error()))
 		return
