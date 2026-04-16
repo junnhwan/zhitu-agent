@@ -1,11 +1,9 @@
 package handler
 
 import (
-	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/cloudwego/eino/schema"
 
 	"github.com/zhitu-agent/zhitu-agent/internal/chat"
 	"github.com/zhitu-agent/zhitu-agent/internal/common"
@@ -59,6 +57,8 @@ func (h *ChatHandler) Chat(c *gin.Context) {
 
 // StreamChat handles POST /api/streamChat — returns SSE stream on success.
 // Mirrors Java: aiChat.streamChat(sessionId, prompt)
+// Enhanced with tool call support: tool calls are handled internally by the service,
+// and only text content is streamed to the client.
 func (h *ChatHandler) StreamChat(c *gin.Context) {
 	var req model.ChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -75,29 +75,15 @@ func (h *ChatHandler) StreamChat(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")
 
 	ctx := c.Request.Context()
-	stream, err := h.chatService.StreamChat(ctx, req.SessionID, req.Prompt)
+	err := h.chatService.StreamChat(ctx, req.SessionID, req.Prompt, func(content string) {
+		c.SSEvent("", content)
+		c.Writer.Flush()
+	})
 	if err != nil {
 		// Error during stream setup — return JSON error per mixed contract
 		c.JSON(http.StatusInternalServerError, common.Error(common.AIModelError, err.Error()))
 		return
 	}
-
-	// Read from StreamReader and write SSE frames
-	c.Stream(func(w io.Writer) bool {
-		chunk, err := stream.Recv()
-		if err != nil {
-			if err == io.EOF {
-				// Stream complete
-				return false
-			}
-			// Stream error
-			return false
-		}
-		if chunk.Content != "" {
-			c.SSEvent("", chunk.Content)
-		}
-		return true
-	})
 }
 
 // MultiAgentChat handles POST /api/multiAgentChat — returns plain text on success.
@@ -141,6 +127,3 @@ func (h *ChatHandler) InsertKnowledge(c *gin.Context) {
 	// Mixed response contract: success → plain text
 	c.String(http.StatusOK, result)
 }
-
-// ensure schema import is used (stream reader type reference)
-var _ *schema.StreamReader[*schema.Message]

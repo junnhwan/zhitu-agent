@@ -10,11 +10,13 @@ import (
 	"syscall"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/zhitu-agent/zhitu-agent/internal/chat"
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
 	"github.com/zhitu-agent/zhitu-agent/internal/handler"
 	"github.com/zhitu-agent/zhitu-agent/internal/middleware"
+	"github.com/zhitu-agent/zhitu-agent/internal/monitor"
 	"github.com/zhitu-agent/zhitu-agent/internal/rag"
 )
 
@@ -75,6 +77,12 @@ func main() {
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	// Prometheus metrics endpoint — mirrors Java Micrometer /metrics
+	if cfg.Monitoring.Prometheus.Enabled {
+		r.GET("/metrics", gin.WrapH(promhttp.HandlerFor(monitor.DefaultRegistry.Prometheus, promhttp.HandlerOpts{})))
+		log.Println("Prometheus metrics endpoint enabled at /metrics")
+	}
 
 	// Static files — mirrors Java static resources
 	r.StaticFile("/chat", "./static/gpt.html")

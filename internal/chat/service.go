@@ -3,10 +3,12 @@ package chat
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cloudwego/eino-ext/components/model/qwen"
 	"github.com/cloudwego/eino/components/model"
@@ -17,6 +19,7 @@ import (
 	"github.com/zhitu-agent/zhitu-agent/internal/agent"
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
 	"github.com/zhitu-agent/zhitu-agent/internal/memory"
+	"github.com/zhitu-agent/zhitu-agent/internal/monitor"
 	"github.com/zhitu-agent/zhitu-agent/internal/rag"
 	ztool "github.com/zhitu-agent/zhitu-agent/internal/tool"
 )
@@ -35,12 +38,13 @@ type Service struct {
 	toolInfos    []*schema.ToolInfo
 	toolMap      map[string]tool.InvokableTool
 	orchestrator *agent.SimpleOrchestrator
+	modelName    string
+	monitor      *monitor.Registry
 }
 
 // NewService creates a ChatService with the given Qwen chat model and optional RAG.
 // System prompt is loaded from the file specified in config.
-func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {
-	ctx := context.Background()
+func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {	ctx := context.Background()
 
 	chatModel, err := qwen.NewChatModel(ctx, &qwen.ChatModelConfig{
 		BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -95,6 +99,8 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {
 		compressor:   compressor,
 		toolInfos:    toolInfos,
 		toolMap:      toolMap,
+		modelName:    cfg.DashScope.ChatModel,
+		monitor:      monitor.DefaultRegistry,
 	}, nil
 }
 
@@ -152,6 +158,18 @@ func (s *Service) getMemory(sessionID int64) *memory.CompressibleMemory {
 // Returns the AI reply as plain text.
 // Handles tool call loop: model may return tool_calls → execute → feed back → repeat.
 func (s *Service) Chat(ctx context.Context, sessionID int64, prompt string) (string, error) {
+	mc := monitor.FromContext(ctx)
+	userIDStr := "unknown"
+	sessionIDStr := "unknown"
+	if mc != nil {
+		userIDStr = fmt.Sprintf("%d", mc.UserID)
+		sessionIDStr = fmt.Sprintf("%d", mc.SessionID)
+	}
+
+	// Record request start
+	s.monitor.AiMetrics.RecordRequest(userIDStr, sessionIDStr, s.modelName, "started")
+	s.monitor.Logger.LogRequest("AI_CHAT", "model", s.modelName, "session", sessionIDStr)
+
 	mem := s.getMemory(sessionID)
 	messages := s.buildMessages(ctx, mem, prompt)
 
@@ -160,6 +178,9 @@ func (s *Service) Chat(ctx context.Context, sessionID int64, prompt string) (str
 
 	resp, err := s.chatModel.Generate(ctx, messages)
 	if err != nil {
+		s.monitor.AiMetrics.RecordRequest(userIDStr, sessionIDStr, s.modelName, "error")
+		s.monitor.AiMetrics.RecordError(userIDStr, sessionIDStr, s.modelName, err.Error())
+		s.monitor.Logger.LogError("AI_CHAT", 0, err.Error())
 		return "", fmt.Errorf("chat model generate failed: %w", err)
 	}
 
@@ -196,26 +217,115 @@ func (s *Service) Chat(ctx context.Context, sessionID int64, prompt string) (str
 	// Add assistant response to memory
 	mem.Add(ctx, resp)
 
+	// Record success metrics
+	s.monitor.AiMetrics.RecordRequest(userIDStr, sessionIDStr, s.modelName, "success")
+	if mc != nil {
+		s.monitor.AiMetrics.RecordResponseTime(userIDStr, sessionIDStr, s.modelName, time.Duration(mc.DurationMs())*time.Millisecond)
+		s.monitor.Logger.LogSuccess("AI_CHAT", mc.DurationMs(), "model", s.modelName)
+	}
+
 	return resp.Content, nil
 }
 
 // StreamChat corresponds to Java aiChat.streamChat(sessionId, prompt).
-// Returns a StreamReader of message chunks for SSE streaming.
-func (s *Service) StreamChat(ctx context.Context, sessionID int64, prompt string) (*schema.StreamReader[*schema.Message], error) {
+// Uses a callback to stream text content to the client while handling tool calls internally.
+// When tool calls are detected in the stream, they are accumulated, executed, and the model
+// is called again — the final text response is then streamed to the client.
+func (s *Service) StreamChat(ctx context.Context, sessionID int64, prompt string, onChunk func(content string)) error {
+	mc := monitor.FromContext(ctx)
+	userIDStr := "unknown"
+	sessionIDStr := "unknown"
+	if mc != nil {
+		userIDStr = fmt.Sprintf("%d", mc.UserID)
+		sessionIDStr = fmt.Sprintf("%d", mc.SessionID)
+	}
+
+	// Record request start
+	s.monitor.AiMetrics.RecordRequest(userIDStr, sessionIDStr, s.modelName, "started")
+	s.monitor.Logger.LogRequest("AI_STREAM_CHAT", "model", s.modelName, "session", sessionIDStr)
+
 	mem := s.getMemory(sessionID)
 	messages := s.buildMessages(ctx, mem, prompt)
 
 	// Add user message to memory
 	mem.Add(ctx, schema.UserMessage(prompt))
 
-	stream, err := s.chatModel.Stream(ctx, messages)
-	if err != nil {
-		return nil, fmt.Errorf("chat model stream failed: %w", err)
+	// Tool call loop — same as Chat but with streaming
+	maxIterations := 10
+	for i := 0; i < maxIterations; i++ {
+		stream, err := s.chatModel.Stream(ctx, messages)
+		if err != nil {
+			s.monitor.AiMetrics.RecordRequest(userIDStr, sessionIDStr, s.modelName, "error")
+			s.monitor.AiMetrics.RecordError(userIDStr, sessionIDStr, s.modelName, err.Error())
+			s.monitor.Logger.LogError("AI_STREAM_CHAT", 0, err.Error())
+			return fmt.Errorf("chat model stream failed: %w", err)
+		}
+
+		// Read stream chunks: forward text to client, detect tool calls
+		var accumulated []*schema.Message
+		hasToolCalls := false
+
+		for {
+			chunk, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return fmt.Errorf("stream read error: %w", err)
+			}
+
+			accumulated = append(accumulated, chunk)
+
+			if len(chunk.ToolCalls) > 0 {
+				hasToolCalls = true
+			} else if chunk.Content != "" && !hasToolCalls {
+				// Stream text content directly to client
+				onChunk(chunk.Content)
+			}
+		}
+
+		if !hasToolCalls {
+			// No tool calls — streaming complete
+			// Add the final assistant response to memory
+			if len(accumulated) > 0 {
+				finalMsg, _ := schema.ConcatMessages(accumulated)
+				if finalMsg != nil {
+					mem.Add(ctx, finalMsg)
+				}
+			}
+			break
+		}
+
+		// Tool calls detected — merge accumulated chunks and execute tools
+		resp, err := schema.ConcatMessages(accumulated)
+		if err != nil {
+			return fmt.Errorf("failed to merge stream chunks: %w", err)
+		}
+
+		messages = append(messages, resp)
+
+		for _, tc := range resp.ToolCalls {
+			toolResult, err := s.executeToolCall(ctx, tc)
+			if err != nil {
+				log.Printf("[ChatService] tool %s execution failed: %v", tc.Function.Name, err)
+				toolResult = fmt.Sprintf("工具调用失败: %v", err)
+			}
+			messages = append(messages, schema.ToolMessage(toolResult, tc.ID,
+				schema.WithToolName(tc.Function.Name)))
+		}
+
+		// Loop continues — next iteration will call Stream again with tool results
+		// The final text response from this follow-up call will be streamed to the client
 	}
 
-	// Note: tool call handling in streaming mode is complex.
-	// For now, stream directly. Tool call support in streaming will be enhanced in Phase 5.
-	return stream, nil
+	// Record success metrics
+	s.monitor.AiMetrics.RecordRequest(userIDStr, sessionIDStr, s.modelName, "success")
+	if mc != nil {
+		s.monitor.AiMetrics.RecordResponseTime(userIDStr, sessionIDStr, s.modelName, time.Duration(mc.DurationMs())*time.Millisecond)
+		s.monitor.Logger.LogSuccess("AI_STREAM_CHAT", mc.DurationMs(), "model", s.modelName)
+	}
+
+	return nil
 }
 
 // MultiAgentChat corresponds to Java simpleOrchestrator.process(sessionId, prompt).
