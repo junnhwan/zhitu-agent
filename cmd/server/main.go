@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
 	"github.com/zhitu-agent/zhitu-agent/internal/handler"
 	"github.com/zhitu-agent/zhitu-agent/internal/middleware"
+	"github.com/zhitu-agent/zhitu-agent/internal/rag"
 )
 
 func main() {
@@ -28,13 +30,27 @@ func main() {
 		log.Fatal("DASHSCOPE_API_KEY is required. Set it via config.yaml (dashscope.api_key) or DASHSCOPE_API_KEY env var")
 	}
 
-	// 2. Initialize chat service
-	chatService, err := chat.NewService(cfg)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// 2. Initialize RAG (Redis + embedding + indexer + retriever)
+	var ragSystem *rag.RAG
+	ragSystem, err = rag.NewRAG(ctx, cfg)
+	if err != nil {
+		log.Printf("Warning: RAG initialization failed (continuing without RAG): %v", err)
+	} else {
+		// Startup: load docs, verify rerank, start auto-reload
+		ragSystem.Startup(ctx)
+		log.Println("RAG system initialized successfully")
+	}
+
+	// 3. Initialize chat service
+	chatService, err := chat.NewService(cfg, ragSystem)
 	if err != nil {
 		log.Fatalf("Failed to initialize chat service: %v", err)
 	}
 
-	// 3. Setup Gin router
+	// 4. Setup Gin router
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -60,7 +76,7 @@ func main() {
 	// Static files — mirrors Java static resources
 	r.StaticFile("/chat", "./static/gpt.html")
 
-	// 4. Start server
+	// 5. Start server
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	log.Printf("Starting ZhituAgent server on %s", addr)
 
@@ -79,5 +95,19 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+
 	log.Println("Shutting down server...")
+
+	// Shutdown RAG
+	if ragSystem != nil {
+		ragSystem.Shutdown()
+	}
+
+	cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
+	}
+
+	log.Println("Server stopped")
 }
