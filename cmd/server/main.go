@@ -86,6 +86,9 @@ func main() {
 
 	// Static files — mirrors Java static resources
 	r.StaticFile("/chat", "./static/gpt.html")
+	r.StaticFile("/gpt.html", "./static/gpt.html")
+	r.StaticFile("/ai.png", "./static/ai.png")
+	r.StaticFile("/user.png", "./static/user.png")
 
 	// 5. Start server
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)

@@ -1,17 +1,4 @@
 services:
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
   zhitu-agent:
     build:
       context: .
@@ -21,11 +8,10 @@ services:
     env_file:
       - .env
     environment:
-      - REDIS_ADDR=redis
+      - REDIS_ADDR=redis:6379
       - GIN_MODE=release
-    depends_on:
-      redis:
-        condition: service_healthy
+    networks:
+      - zhitu-net
     volumes:
       - ./docs:/app/docs
     restart: unless-stopped
@@ -37,6 +23,8 @@ services:
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
+    networks:
+      - zhitu-net
     depends_on:
       - zhitu-agent
     restart: unless-stopped
@@ -52,11 +40,17 @@ services:
     volumes:
       - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana
+    networks:
+      - zhitu-net
     depends_on:
       - prometheus
     restart: unless-stopped
 
+networks:
+  zhitu-net:
+    external: true
+    name: zhitu-net
+
 volumes:
-  redis-data:
   prometheus-data:
   grafana-data:

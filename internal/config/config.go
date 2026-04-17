@@ -208,7 +208,11 @@ func overrideFromEnv(cfg *Config) {
 		cfg.DashScope.RerankModel = v
 	}
 	if v := os.Getenv("REDIS_ADDR"); v != "" {
-		cfg.Redis.Host = v
+		parts := strings.SplitN(v, ":", 2)
+		cfg.Redis.Host = parts[0]
+		if len(parts) == 2 {
+			fmt.Sscanf(parts[1], "%d", &cfg.Redis.Port)
+		}
 	}
 	if v := os.Getenv("REDIS_PASSWORD"); v != "" {
 		cfg.Redis.Password = v
