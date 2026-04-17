@@ -1,0 +1,10 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "zhitu-agent"
+    static_configs:
+      - targets: ["zhitu-agent:10010"]
+    metrics_path: "/metrics"
+    scrape_interval: 10s

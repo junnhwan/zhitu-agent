@@ -12,11 +12,11 @@ import (
 
 // ChatHandler handles the 4 core API endpoints, mirroring Java AiChatController.
 type ChatHandler struct {
-	chatService *chat.Service
+	chatService chat.ChatService
 }
 
 // NewChatHandler creates a ChatHandler with the given chat service.
-func NewChatHandler(chatService *chat.Service) *ChatHandler {
+func NewChatHandler(chatService chat.ChatService) *ChatHandler {
 	return &ChatHandler{
 		chatService: chatService,
 	}
