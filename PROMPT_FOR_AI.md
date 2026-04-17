@@ -6,7 +6,7 @@
 
 ## 你的任务
 
-在 `D:\dev\my_proj\go\ZhituAgent` 目录下，用 **Go + Eino 框架** 从零搭建一个 AI 智能体项目（知途/ZhituAgent）。你需要从零搭建整个项目，实现所有核心功能，确保项目可以独立运行、展示和写进简历。
+在 `D:\dev\my_proj\go\ZhituAgent` 目录下，用 **Go + Eino 框架** 从零搭建一个 AI 智能体项目（知途/ZhituAgent），实现所有核心功能，确保项目可以独立运行、展示和写进简历。
 
 ---
 
