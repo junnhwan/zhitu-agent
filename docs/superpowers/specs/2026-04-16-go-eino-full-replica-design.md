@@ -240,10 +240,10 @@ Go 版本将复刻以下接口：
 Go 版本必须单独复刻 Java 当前的“AI 合同层”：
 
 - `system-prompt/chat-bot.txt`
-  - 规定 ByteCoach 的身份
-  - 要求回答简短积极
+  - 规定知途的身份
+  - 要求回答简明扼要、逻辑清晰
   - 要求输出纯文本
-  - 要求结尾带 `!`
+  - 要求代码片段用 ``` 包裹
 - `SafeInputGuardrail`
   - 当前只拦截包含 `死`、`杀` 的输入
 - `GlobalExceptionHandler`
