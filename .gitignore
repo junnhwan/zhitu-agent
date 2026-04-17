@@ -1,3 +1,4 @@
 .claude
 go.mod
 go.sum
+.env
