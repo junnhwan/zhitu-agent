@@ -356,8 +356,21 @@ func (s *Service) buildMessages(ctx context.Context, mem *memory.CompressibleMem
 
 	// RAG retrieval: inject relevant knowledge before user message
 	if s.rag != nil && s.rag.Retriever != nil {
+		start := time.Now()
 		docs, err := s.rag.Retriever.Retrieve(ctx, prompt)
+		ragDuration := time.Since(start)
+
+		userIDStr := "unknown"
+		sessionIDStr := "unknown"
+		if mc := monitor.FromContext(ctx); mc != nil {
+			userIDStr = fmt.Sprintf("%d", mc.UserID)
+			sessionIDStr = fmt.Sprintf("%d", mc.SessionID)
+		}
+		s.monitor.RagMetrics.RecordRetrievalTime(userIDStr, sessionIDStr, ragDuration)
+
 		if err == nil && len(docs) > 0 {
+			s.monitor.RagMetrics.RecordHit(userIDStr, sessionIDStr)
+
 			var kb strings.Builder
 			kb.WriteString("参考知识：\n")
 			for i, doc := range docs {
@@ -374,6 +387,8 @@ func (s *Service) buildMessages(ctx context.Context, mem *memory.CompressibleMem
 			}
 			messages = append(messages, schema.UserMessage(kb.String()))
 			messages = append(messages, schema.AssistantMessage("好的，我已了解相关知识，请继续提问。", nil))
+		} else if err == nil {
+			s.monitor.RagMetrics.RecordMiss(userIDStr, sessionIDStr)
 		}
 	}
 

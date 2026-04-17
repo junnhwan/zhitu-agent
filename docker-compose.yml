@@ -8,7 +8,6 @@ services:
     env_file:
       - .env
     environment:
-      - REDIS_ADDR=redis:6379
       - GIN_MODE=release
     networks:
       - zhitu-net
