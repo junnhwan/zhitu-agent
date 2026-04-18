@@ -20,19 +20,19 @@ func init() {
 
 // mockChatService implements chat.ChatService for testing.
 type mockChatService struct {
-	chatResult     string
-	chatErr        error
-	streamChunks   []string
-	streamErr      error
-	multiResult    string
-	multiErr       error
-	insertResult   string
-	insertErr      error
-	lastPrompt     string
-	lastSessionID  int64
-	lastInsertQ    string
-	lastInsertA    string
-	lastInsertSrc  string
+	chatResult    string
+	chatErr       error
+	streamChunks  []string
+	streamErr     error
+	multiResult   string
+	multiErr      error
+	insertResult  string
+	insertErr     error
+	lastPrompt    string
+	lastSessionID int64
+	lastInsertQ   string
+	lastInsertA   string
+	lastInsertSrc string
 }
 
 func (m *mockChatService) Chat(ctx context.Context, sessionID int64, prompt string) (string, error) {
@@ -274,12 +274,12 @@ func TestChatRequestValidation(t *testing.T) {
 	r := setupRouter(svc)
 
 	tests := []struct {
-		name  string
-		body  string
-		want  int
+		name string
+		body string
+		want int
 	}{
 		{"empty body", ``, http.StatusBadRequest},
-		{"missing prompt", `{"sessionId":1,"userId":2}`, http.StatusOK}, // prompt defaults to "" which is valid JSON
+		{"missing prompt", `{"sessionId":1,"userId":2}`, http.StatusBadRequest}, // prompt is required by model.ChatRequest
 		{"wrong type sessionId", `{"sessionId":"abc","userId":2,"prompt":"hi"}`, http.StatusBadRequest},
 	}
 

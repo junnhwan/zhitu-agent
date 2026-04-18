@@ -37,7 +37,7 @@ func main() {
 
 	// 2. Initialize RAG (Redis + embedding + indexer + retriever)
 	var ragSystem *rag.RAG
-	ragSystem, err = rag.NewRAG(ctx, cfg)
+	ragSystem, err = rag.NewRAG(ctx, cfg, monitor.DefaultRegistry.AiMetrics)
 	if err != nil {
 		log.Printf("Warning: RAG initialization failed (continuing without RAG): %v", err)
 	} else {

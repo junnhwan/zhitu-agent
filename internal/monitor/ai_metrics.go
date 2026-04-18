@@ -16,6 +16,10 @@ type AiMetrics struct {
 	tokenCounter   *prometheus.CounterVec
 	responseTimer  *prometheus.HistogramVec
 	workflowModeCounter *prometheus.CounterVec
+	ragChannelFailed    *prometheus.CounterVec
+	ragZeroHit          *prometheus.CounterVec
+	ragRerankFallback   prometheus.Counter
+	ragRetrieveDuration *prometheus.HistogramVec
 
 	counterCache map[string]prometheus.Counter
 	timerCache   map[string]prometheus.Observer
@@ -57,7 +61,43 @@ func NewAiMetrics(registry *prometheus.Registry) *AiMetrics {
 	}, []string{"mode", "entry"})
 
 	registry.MustRegister(m.requestCounter, m.errorCounter, m.tokenCounter, m.responseTimer, m.workflowModeCounter)
+
+	m.ragChannelFailed = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "rag_channel_failed_total",
+		Help: "RAG 单通道检索失败/超时次数",
+	}, []string{"channel"})
+	m.ragZeroHit = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "rag_zero_hit_total",
+		Help: "RAG 所有通道零命中的兜底路径分布",
+	}, []string{"fallback"})
+	m.ragRerankFallback = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "rag_rerank_fallback_total",
+		Help: "rerank 失败/空结果降级次数",
+	})
+	m.ragRetrieveDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "rag_retrieve_duration_seconds",
+		Help:    "RAG 检索端到端耗时",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"mode"})
+	registry.MustRegister(m.ragChannelFailed, m.ragZeroHit, m.ragRerankFallback, m.ragRetrieveDuration)
+
 	return m
+}
+
+func (m *AiMetrics) RecordRAGChannelFailed(name string) {
+	m.ragChannelFailed.WithLabelValues(name).Inc()
+}
+
+func (m *AiMetrics) RecordRAGZeroHit(fallback string) {
+	m.ragZeroHit.WithLabelValues(fallback).Inc()
+}
+
+func (m *AiMetrics) RecordRAGRerankFallback() {
+	m.ragRerankFallback.Inc()
+}
+
+func (m *AiMetrics) RecordRAGRetrieveDuration(mode string, d time.Duration) {
+	m.ragRetrieveDuration.WithLabelValues(mode).Observe(d.Seconds())
 }
 
 // RecordRequest increments the request counter with the given labels.

@@ -2,9 +2,13 @@ package rag
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
+	"github.com/zhitu-agent/zhitu-agent/internal/monitor"
+	"github.com/zhitu-agent/zhitu-agent/internal/rag/channel"
+	"github.com/zhitu-agent/zhitu-agent/internal/rag/postprocessor"
 )
 
 // RAG is the top-level RAG system that holds all components.
@@ -20,32 +24,28 @@ type RAG struct {
 }
 
 // NewRAG initializes all RAG components and returns a fully wired RAG system.
-func NewRAG(ctx context.Context, cfg *config.Config) (*RAG, error) {
-	// 1. Redis store (client + embedder + indexer + retriever)
+func NewRAG(ctx context.Context, cfg *config.Config, metrics *monitor.AiMetrics) (*RAG, error) {
 	store, err := NewStore(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Document indexer (splitter + store)
 	indexer := NewIndexer(store, cfg)
-
-	// 3. Rerank client
 	rerankClient := NewQwenRerankClient(cfg.DashScope.APIKey, cfg.DashScope.RerankModel)
-
-	// 4. Query preprocessor
 	queryPreprocessor := NewQueryPreprocessor()
 
-	// 5. Two-stage retriever
-	retriever := NewReRankingRetriever(store, rerankClient, cfg, queryPreprocessor)
+	legacy := NewReRankingRetriever(store, rerankClient, cfg, queryPreprocessor)
 
-	// 6. Data loader (startup)
+	var retriever Retriever = legacy
+	if cfg.RAG.PipelineMode == "hybrid" {
+		retriever = buildHybridPipeline(cfg, store, rerankClient, queryPreprocessor, legacy, metrics)
+		log.Printf("[RAG] pipeline_mode=hybrid — multi-channel enabled")
+	} else {
+		log.Printf("[RAG] pipeline_mode=legacy — single-channel vector+rerank")
+	}
+
 	dataLoader := NewDataLoader(cfg.RAG.DocsPath, indexer)
-
-	// 7. Auto reloader (periodic scan)
 	autoReloader := NewAutoReloader(cfg.RAG.DocsPath, indexer, 5*time.Minute)
-
-	// 8. Rerank verifier (conditional startup test)
 	rerankVerifier := NewRerankVerifier(rerankClient, cfg.Rerank.Test.Enabled)
 
 	return &RAG{
@@ -60,15 +60,42 @@ func NewRAG(ctx context.Context, cfg *config.Config) (*RAG, error) {
 	}, nil
 }
 
+func buildHybridPipeline(
+	cfg *config.Config,
+	store *Store,
+	rerankClient *QwenRerankClient,
+	pre *QueryPreprocessor,
+	legacy Retriever,
+	metrics *monitor.AiMetrics,
+) *Pipeline {
+	channels := []channel.Channel{
+		channel.NewVectorChannel(store.Retriever, cfg.RAG.BaseRetriever.MinScore),
+		channel.NewBM25Channel(store.RedisClient, redisIndexName, 20),
+	}
+
+	hooks := PipelineHooks{}
+	if metrics != nil {
+		hooks.OnChannelFailed = metrics.RecordRAGChannelFailed
+		hooks.OnZeroHit = metrics.RecordRAGZeroHit
+	}
+	var rerankFallback func()
+	if metrics != nil {
+		rerankFallback = metrics.RecordRAGRerankFallback
+	}
+	procs := []postprocessor.Processor{
+		postprocessor.NewDedup(),
+		postprocessor.NewRRF(cfg.RAG.RRF.K, cfg.RAG.RRF.ConsistencyBonus),
+		postprocessor.NewRerank(rerankClient, cfg.RAG.Rerank.FinalTopN, rerankFallback),
+	}
+
+	timeout := time.Duration(cfg.RAG.ChannelTimeoutMs) * time.Millisecond
+	return NewPipeline(pre, channels, procs, timeout, legacy, cfg.RAG.Rerank.FinalTopN, hooks)
+}
+
 // Startup performs all startup tasks: load docs, verify rerank, start auto-reload.
 func (r *RAG) Startup(ctx context.Context) {
-	// Load existing documents
 	r.DataLoader.Load(ctx)
-
-	// Verify rerank if enabled
 	r.RerankVerifier.Verify(ctx)
-
-	// Start auto-reload
 	r.AutoReloader.Start(ctx)
 }
 

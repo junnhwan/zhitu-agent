@@ -3,11 +3,12 @@ package channel
 import (
 	"context"
 
+	"github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
 )
 
 type VectorSource interface {
-	Retrieve(ctx context.Context, query string) ([]*schema.Document, error)
+	Retrieve(ctx context.Context, query string, opts ...retriever.Option) ([]*schema.Document, error)
 }
 
 type VectorChannel struct {

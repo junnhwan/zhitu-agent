@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -13,7 +14,7 @@ type fakeVecSrc struct {
 	err  error
 }
 
-func (f *fakeVecSrc) Retrieve(ctx context.Context, query string) ([]*schema.Document, error) {
+func (f *fakeVecSrc) Retrieve(ctx context.Context, query string, _ ...retriever.Option) ([]*schema.Document, error) {
 	return f.docs, f.err
 }
 
