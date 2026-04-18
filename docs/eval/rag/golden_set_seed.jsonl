@@ -1,0 +1,30 @@
+{"query":"什么是 RAG","relevant_keywords":["RAG","检索"]}
+{"query":"什么是 Eino Graph","relevant_keywords":["Eino","Graph"]}
+{"query":"ReAct Agent 怎么用","relevant_keywords":["ReAct"]}
+{"query":"qwen-turbo 模型的用途","relevant_keywords":["qwen"]}
+{"query":"qwen3-rerank 是什么","relevant_keywords":["rerank"]}
+{"query":"RediSearch 如何建索引","relevant_keywords":["RediSearch","FT"]}
+{"query":"Redis Stack 向量搜索","relevant_keywords":["Redis","向量"]}
+{"query":"RRF 分数融合算法","relevant_keywords":["RRF"]}
+{"query":"MMR 多样性重排","relevant_keywords":["MMR"]}
+{"query":"Prometheus 指标怎么打","relevant_keywords":["Prometheus"]}
+{"query":"gobreaker 熔断器","relevant_keywords":["gobreaker","熔断"]}
+{"query":"意图分类三级树","relevant_keywords":["意图"]}
+{"query":"Query Rewrite 解消指代","relevant_keywords":["Rewrite","指代"]}
+{"query":"置信度 Guardian 澄清","relevant_keywords":["置信度","澄清"]}
+{"query":"LLM 摘要记忆压缩","relevant_keywords":["摘要","压缩"]}
+{"query":"Micro Compact 工具结果压缩","relevant_keywords":["Micro","工具"]}
+{"query":"Token 估算中英分离","relevant_keywords":["Token"]}
+{"query":"分布式锁释放 Lua 脚本","relevant_keywords":["分布式锁"]}
+{"query":"混合响应纯文本 JSON","relevant_keywords":["混合响应"]}
+{"query":"multiAgentChat 知识增强链路","relevant_keywords":["multiAgentChat"]}
+{"query":"WebSearch 工具缺失","relevant_keywords":["WebSearch"]}
+{"query":"MCP 协议客户端","relevant_keywords":["MCP"]}
+{"query":"OpsPilot 项目借鉴","relevant_keywords":["OpsPilot"]}
+{"query":"ragent 三级意图","relevant_keywords":["ragent"]}
+{"query":"paismart-go KNN BM25","relevant_keywords":["paismart"]}
+{"query":"Phase 2 Wave 2 多通道检索","relevant_keywords":["Wave 2","多通道"]}
+{"query":"golden set 评估集 Recall@5","relevant_keywords":["golden","Recall"]}
+{"query":"Channel 接口插件化","relevant_keywords":["Channel"]}
+{"query":"FT.SEARCH @content 查询","relevant_keywords":["FT.SEARCH"]}
+{"query":"CJK Token 估算公式","relevant_keywords":["CJK"]}
