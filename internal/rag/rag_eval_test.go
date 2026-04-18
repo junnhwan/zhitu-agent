@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	_ "github.com/joho/godotenv/autoload"
+
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
 	"github.com/zhitu-agent/zhitu-agent/internal/monitor"
 	"github.com/zhitu-agent/zhitu-agent/internal/rag/channel"
@@ -105,16 +107,32 @@ func runEval(t *testing.T, label string, ret Retriever, samples []goldenSample, 
 // Run: DASHSCOPE_API_KEY=xxx go test -tags=eval ./internal/rag/ -run TestRagAB -v
 // Requires local Redis Stack with indexed ./docs content.
 func TestRagAB(t *testing.T) {
-	if os.Getenv("DASHSCOPE_API_KEY") == "" {
-		t.Skip("DASHSCOPE_API_KEY not set")
+	apiKey := firstNonEmpty(os.Getenv("DASHSCOPE_API_KEY"), os.Getenv("QWEN_API_KEY"))
+	if apiKey == "" {
+		t.Skip("DASHSCOPE_API_KEY / QWEN_API_KEY not set")
 	}
 	cfg := &config.Config{}
-	cfg.DashScope.APIKey = os.Getenv("DASHSCOPE_API_KEY")
-	cfg.DashScope.EmbeddingModel = "text-embedding-v3"
+	cfg.DashScope.APIKey = apiKey
+	cfg.DashScope.EmbeddingModel = firstNonEmpty(os.Getenv("QWEN_EMBEDDING_MODEL"), "text-embedding-v3")
 	cfg.DashScope.EmbeddingDimensions = 1024
-	cfg.DashScope.RerankModel = "qwen3-rerank"
-	cfg.Redis.Host = getEnvOr("REDIS_HOST", "127.0.0.1")
-	fmt.Sscanf(getEnvOr("REDIS_PORT", "6379"), "%d", &cfg.Redis.Port)
+	cfg.DashScope.RerankModel = firstNonEmpty(os.Getenv("QWEN_RERANK_MODEL"), "qwen3-rerank")
+
+	host, port := "127.0.0.1", 6379
+	if addr := os.Getenv("REDIS_ADDR"); addr != "" {
+		parts := strings.SplitN(addr, ":", 2)
+		host = parts[0]
+		if len(parts) == 2 {
+			fmt.Sscanf(parts[1], "%d", &port)
+		}
+	}
+	if v := os.Getenv("REDIS_HOST"); v != "" {
+		host = v
+	}
+	if v := os.Getenv("REDIS_PORT"); v != "" {
+		fmt.Sscanf(v, "%d", &port)
+	}
+	cfg.Redis.Host = host
+	cfg.Redis.Port = port
 	cfg.Redis.Password = os.Getenv("REDIS_PASSWORD")
 	cfg.RAG.BaseRetriever.MaxResults = 30
 	cfg.RAG.BaseRetriever.MinScore = 0.0
@@ -161,4 +179,13 @@ func getEnvOr(k, d string) string {
 		return v
 	}
 	return d
+}
+
+func firstNonEmpty(vs ...string) string {
+	for _, v := range vs {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
