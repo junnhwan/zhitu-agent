@@ -16,13 +16,22 @@ type BM25Channel struct {
 	indexName string
 	topK      int
 	maxQuery  int
+	field     string
+	tokenize  func(string) string
 }
 
 func NewBM25Channel(rdb *redis.Client, indexName string, topK int) *BM25Channel {
 	if topK <= 0 {
 		topK = 20
 	}
-	return &BM25Channel{rdb: rdb, indexName: indexName, topK: topK, maxQuery: 200}
+	return &BM25Channel{rdb: rdb, indexName: indexName, topK: topK, maxQuery: 200, field: "content"}
+}
+
+// WithTokenizedField 切到 content_tokenized 字段并在查询前对 query 分词。
+func (c *BM25Channel) WithTokenizedField(tokenize func(string) string) *BM25Channel {
+	c.field = "content_tokenized"
+	c.tokenize = tokenize
+	return c
 }
 
 func (c *BM25Channel) Name() string { return "bm25" }
@@ -58,8 +67,14 @@ func (c *BM25Channel) Retrieve(ctx context.Context, query string) ([]*Candidate,
 	if len([]rune(q)) > c.maxQuery {
 		q = string([]rune(q)[:c.maxQuery])
 	}
+	if c.tokenize != nil {
+		q = c.tokenize(q)
+		if strings.TrimSpace(q) == "" {
+			return nil, nil
+		}
+	}
 	esc := escapeBM25Query(q)
-	expr := fmt.Sprintf("@content:(%s) | @file_name:(%s)", esc, esc)
+	expr := fmt.Sprintf("@%s:(%s)", c.field, esc)
 
 	raw, err := c.rdb.Do(ctx, "FT.SEARCH", c.indexName,
 		expr,
