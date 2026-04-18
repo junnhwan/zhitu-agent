@@ -115,6 +115,7 @@ func TestRagAB(t *testing.T) {
 	cfg.DashScope.RerankModel = "qwen3-rerank"
 	cfg.Redis.Host = getEnvOr("REDIS_HOST", "127.0.0.1")
 	fmt.Sscanf(getEnvOr("REDIS_PORT", "6379"), "%d", &cfg.Redis.Port)
+	cfg.Redis.Password = os.Getenv("REDIS_PASSWORD")
 	cfg.RAG.BaseRetriever.MaxResults = 30
 	cfg.RAG.BaseRetriever.MinScore = 0.0
 	cfg.RAG.Rerank.FinalTopN = 5
