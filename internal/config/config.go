@@ -18,6 +18,7 @@ type Config struct {
 	BigModel   BigModelConfig   `mapstructure:"bigmodel"`
 	Rerank     RerankConfig     `mapstructure:"rerank"`
 	Monitoring MonitoringConfig `mapstructure:"monitoring"`
+	Understand UnderstandConfig `mapstructure:"understand"`
 }
 
 type ServerConfig struct {
@@ -115,6 +116,14 @@ type MonitoringPrometheusConfig struct {
 
 type MonitoringGrafanaConfig struct {
 	Enabled bool `mapstructure:"enabled"`
+}
+
+type UnderstandConfig struct {
+	Enabled              bool    `mapstructure:"enabled"`
+	TreePath             string  `mapstructure:"tree_path"`
+	LLMModel             string  `mapstructure:"llm_model"`
+	ConfidenceThreshold  float64 `mapstructure:"confidence_threshold"`
+	MaxClarifyAttempts   int     `mapstructure:"max_clarify_attempts"`
 }
 
 func Load(configPath string) (*Config, error) {

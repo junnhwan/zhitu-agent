@@ -4,21 +4,25 @@ import (
 	"context"
 	"log"
 	"strings"
+
+	"github.com/cloudwego/eino/schema"
+	"github.com/zhitu-agent/zhitu-agent/internal/understand"
 )
 
-// Knowledge keywords — mirrors Java SimpleOrchestrator.KNOWLEDGE_KEYWORDS
 var knowledgeKeywords = []string{
 	"查询", "了解", "什么是", "介绍", "解释", "说明",
 }
 
-// SimpleOrchestrator coordinates multiple agents to handle user requests.
-// Mirrors Java SimpleOrchestrator — keyword detection → KnowledgeAgent → ReasoningAgent.
+type IntentRouter interface {
+	Understand(ctx context.Context, sessionID int64, history []*schema.Message, query string) (*understand.Result, error)
+}
+
 type SimpleOrchestrator struct {
 	knowledgeAgent *KnowledgeAgent
 	reasoningAgent *ReasoningAgent
+	intentRouter   IntentRouter
 }
 
-// NewSimpleOrchestrator creates an orchestrator with the given agents.
 func NewSimpleOrchestrator(knowledgeAgent *KnowledgeAgent, reasoningAgent *ReasoningAgent) *SimpleOrchestrator {
 	return &SimpleOrchestrator{
 		knowledgeAgent: knowledgeAgent,
@@ -26,15 +30,18 @@ func NewSimpleOrchestrator(knowledgeAgent *KnowledgeAgent, reasoningAgent *Reaso
 	}
 }
 
-// Process handles a user request by coordinating agents.
-// Mirrors Java SimpleOrchestrator.process(sessionId, userInput).
+func (o *SimpleOrchestrator) WithIntentRouter(r IntentRouter) *SimpleOrchestrator {
+	o.intentRouter = r
+	return o
+}
+
 func (o *SimpleOrchestrator) Process(ctx context.Context, sessionID int64, userInput string) string {
 	log.Printf("[SimpleOrchestrator] processing request, sessionID: %d", sessionID)
 
 	enhancedInput := userInput
+	needKnowledge := o.routeNeedsKnowledge(ctx, sessionID, userInput)
 
-	// Check if knowledge retrieval is needed
-	if o.needKnowledgeRetrieval(userInput) {
+	if needKnowledge {
 		log.Printf("[SimpleOrchestrator] knowledge query detected, calling KnowledgeAgent")
 
 		knowledgeResult := o.knowledgeAgent.Execute(ctx, sessionID, userInput)
@@ -48,15 +55,25 @@ func (o *SimpleOrchestrator) Process(ctx context.Context, sessionID int64, userI
 		log.Printf("[SimpleOrchestrator] no knowledge retrieval needed, direct reasoning")
 	}
 
-	// Call reasoning agent for final response
 	finalResult := o.reasoningAgent.Execute(ctx, sessionID, enhancedInput)
 	log.Printf("[SimpleOrchestrator] processing complete")
 
 	return finalResult
 }
 
-// needKnowledgeRetrieval checks if the input contains any knowledge keywords.
-// Mirrors Java SimpleOrchestrator.needKnowledgeRetrieval(input).
+func (o *SimpleOrchestrator) routeNeedsKnowledge(ctx context.Context, sessionID int64, userInput string) bool {
+	if o.intentRouter == nil {
+		return o.needKnowledgeRetrieval(userInput)
+	}
+	res, err := o.intentRouter.Understand(ctx, sessionID, nil, userInput)
+	if err != nil || res == nil || res.Fallback {
+		log.Printf("[SimpleOrchestrator] intent router unavailable, falling back to keyword: %v", err)
+		return o.needKnowledgeRetrieval(userInput)
+	}
+	log.Printf("[SimpleOrchestrator] intent: domain=%s category=%s confidence=%.2f", res.Intent.Domain, res.Intent.Category, res.Intent.Confidence)
+	return res.Intent.Domain == "KNOWLEDGE"
+}
+
 func (o *SimpleOrchestrator) needKnowledgeRetrieval(input string) bool {
 	for _, keyword := range knowledgeKeywords {
 		if strings.Contains(input, keyword) {

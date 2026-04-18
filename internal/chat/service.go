@@ -22,6 +22,7 @@ import (
 	"github.com/zhitu-agent/zhitu-agent/internal/monitor"
 	"github.com/zhitu-agent/zhitu-agent/internal/rag"
 	ztool "github.com/zhitu-agent/zhitu-agent/internal/tool"
+	"github.com/zhitu-agent/zhitu-agent/internal/understand"
 )
 
 // Service implements the core chat logic, mirroring Java AiChat + AiChatService.
@@ -39,6 +40,7 @@ type Service struct {
 	toolInfos      []*schema.ToolInfo
 	toolMap        map[string]tool.InvokableTool
 	orchestrator   *agent.SimpleOrchestrator
+	intentRouter   *understand.Service
 	modelName      string
 	monitor        *monitor.Registry
 }
@@ -104,6 +106,30 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {	ctx := conte
 		log.Printf("[ChatService] bound %d tools to chat model", len(toolInfos))
 	}
 
+	// Optional understand.Service for intent-driven routing
+	var intentRouter *understand.Service
+	if cfg.Understand.Enabled {
+		tree, err := understand.LoadTree(cfg.Understand.TreePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load intent tree: %w", err)
+		}
+		understandModel, err := qwen.NewChatModel(ctx, &qwen.ChatModelConfig{
+			BaseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+			APIKey:  cfg.DashScope.APIKey,
+			Model:   cfg.Understand.LLMModel,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create understand chat model: %w", err)
+		}
+		intentRouter = understand.NewService(
+			understand.NewRewriter(understandModel),
+			understand.NewClassifier(understandModel, tree),
+			understand.NewGuardian(cfg.Understand.ConfidenceThreshold, cfg.Understand.MaxClarifyAttempts),
+			nil,
+		)
+		log.Printf("[ChatService] understand service enabled (model=%s)", cfg.Understand.LLMModel)
+	}
+
 	return &Service{
 		chatModel:      chatModel,
 		systemPrompt:   systemPrompt,
@@ -117,6 +143,7 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {	ctx := conte
 		toolMap:        toolMap,
 		modelName:      cfg.DashScope.ChatModel,
 		monitor:        monitor.DefaultRegistry,
+		intentRouter:   intentRouter,
 	}, nil
 }
 
@@ -126,7 +153,12 @@ func (s *Service) InitOrchestrator() {
 	knowledgeAgent := agent.NewKnowledgeAgent(s.rag)
 	reasoningAgent := agent.NewReasoningAgent(s.Chat)
 	s.orchestrator = agent.NewSimpleOrchestrator(knowledgeAgent, reasoningAgent)
-	log.Printf("[ChatService] orchestrator initialized")
+	if s.intentRouter != nil {
+		s.orchestrator.WithIntentRouter(s.intentRouter)
+		log.Printf("[ChatService] orchestrator initialized with intent router")
+	} else {
+		log.Printf("[ChatService] orchestrator initialized")
+	}
 }
 
 // createTools creates all tool instances and returns their ToolInfo list and a name→tool map.

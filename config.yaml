@@ -61,3 +61,10 @@ monitoring:
     enabled: true
   grafana:
     enabled: true
+
+understand:
+  enabled: false
+  tree_path: "internal/understand/tree.yaml"
+  llm_model: "qwen-turbo"
+  confidence_threshold: 0.6
+  max_clarify_attempts: 3
