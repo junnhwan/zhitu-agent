@@ -60,7 +60,7 @@ func (c *TokenCountCompressor) Compress(messages []*schema.Message) []*schema.Me
 func (c *TokenCountCompressor) EstimateTokens(messages []*schema.Message) int {
 	total := 0
 	for _, msg := range messages {
-		total += len(msg.Content) / 4
+		total += EstimateTokens(msg.Content)
 	}
 	return total
 }
