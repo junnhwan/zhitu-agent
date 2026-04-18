@@ -20,6 +20,7 @@ type Config struct {
 	Monitoring MonitoringConfig `mapstructure:"monitoring"`
 	Understand UnderstandConfig `mapstructure:"understand"`
 	Chat       ChatConfig       `mapstructure:"chat"`
+	MCP        MCPConfig        `mapstructure:"mcp"`
 }
 
 type ServerConfig struct {
@@ -145,6 +146,25 @@ type ChatConfig struct {
 	MaxReActSteps int    `mapstructure:"max_react_steps"`
 }
 
+type MCPConfig struct {
+	Client MCPClientConfig `mapstructure:"client"`
+}
+
+type MCPClientConfig struct {
+	Enabled bool              `mapstructure:"enabled"`
+	Servers []MCPServerConfig `mapstructure:"servers"`
+}
+
+type MCPServerConfig struct {
+	Name      string            `mapstructure:"name"`
+	Transport string            `mapstructure:"transport"` // sse | stdio
+	URL       string            `mapstructure:"url"`       // sse only
+	Command   []string          `mapstructure:"command"`   // stdio only: [cmd, arg1, arg2...]
+	Env       map[string]string `mapstructure:"env"`       // stdio only
+	Enabled   bool              `mapstructure:"enabled"`
+	TimeoutMs int               `mapstructure:"timeout_ms"` // Initialize + per-call
+}
+
 func Load(configPath string) (*Config, error) {
 	v := viper.New()
 
@@ -228,6 +248,9 @@ func setDefaults(v *viper.Viper) {
 	// Monitoring
 	v.SetDefault("monitoring.prometheus.enabled", true)
 	v.SetDefault("monitoring.grafana.enabled", true)
+
+	// MCP
+	v.SetDefault("mcp.client.enabled", false)
 }
 
 func overrideFromEnv(cfg *Config) {

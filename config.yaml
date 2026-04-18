@@ -79,3 +79,18 @@ understand:
 chat:
   workflow_mode: legacy
   max_react_steps: 10
+
+mcp:
+  client:
+    enabled: false
+    servers: []
+      # - name: fs
+      #   transport: stdio
+      #   command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+      #   enabled: true
+      #   timeout_ms: 10000
+      # - name: internal-jira
+      #   transport: sse
+      #   url: "https://mcp.internal/jira/sse"
+      #   enabled: true
+      #   timeout_ms: 5000
