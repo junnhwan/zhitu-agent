@@ -1,0 +1,18 @@
+domains:
+  - name: KNOWLEDGE
+    description: 问知识、查文档、概念解释
+    categories:
+      - name: RAG_QUERY
+        route: knowledge_agent
+      - name: CODE_QUERY
+        route: knowledge_agent
+  - name: TOOL
+    description: 要求执行动作（发邮件、查时间、做计算）
+    categories:
+      - name: EMAIL
+        route: tool:send_email
+      - name: TIME
+        route: tool:get_time
+  - name: CHITCHAT
+    description: 闲聊、寒暄、不需要工具或知识
+    route: direct_llm

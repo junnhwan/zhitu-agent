@@ -3,12 +3,14 @@ module github.com/zhitu-agent/zhitu-agent
 go 1.26.1
 
 require (
+	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/cloudwego/eino v0.8.9
 	github.com/cloudwego/eino-ext/components/embedding/dashscope v0.0.0-20260415031821-e2fcf1501241
 	github.com/cloudwego/eino-ext/components/indexer/redis v0.0.0-20260415031821-e2fcf1501241
 	github.com/cloudwego/eino-ext/components/model/qwen v0.1.8
 	github.com/cloudwego/eino-ext/components/retriever/redis v0.0.0-20260415031821-e2fcf1501241
 	github.com/gin-gonic/gin v1.12.0
+	github.com/goccy/go-yaml v1.19.2
 	github.com/google/uuid v1.6.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redis/go-redis/v9 v9.10.0
@@ -16,7 +18,6 @@ require (
 )
 
 require (
-	github.com/alicebob/miniredis/v2 v2.37.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
@@ -38,7 +39,6 @@ require (
 	github.com/go-playground/validator/v10 v10.30.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
-	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/goph/emperror v0.17.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
