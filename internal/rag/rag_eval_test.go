@@ -14,6 +14,8 @@ import (
 
 	_ "github.com/joho/godotenv/autoload"
 
+	"github.com/joho/godotenv"
+
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
 	"github.com/zhitu-agent/zhitu-agent/internal/monitor"
 	"github.com/zhitu-agent/zhitu-agent/internal/rag/channel"
@@ -107,6 +109,7 @@ func runEval(t *testing.T, label string, ret Retriever, samples []goldenSample, 
 // Run: DASHSCOPE_API_KEY=xxx go test -tags=eval ./internal/rag/ -run TestRagAB -v
 // Requires local Redis Stack with indexed ./docs content.
 func TestRagAB(t *testing.T) {
+	_ = godotenv.Load("../../.env")
 	apiKey := firstNonEmpty(os.Getenv("DASHSCOPE_API_KEY"), os.Getenv("QWEN_API_KEY"))
 	if apiKey == "" {
 		t.Skip("DASHSCOPE_API_KEY / QWEN_API_KEY not set")

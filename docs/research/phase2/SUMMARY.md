@@ -185,3 +185,6 @@
 - ✅ **P2 Query Rewrite + 三级意图分类** (PR 2) — `internal/understand/` 新包：Rewriter + Classifier(JSON 容错) + Guardian(置信度兜底) + Service(gobreaker 熔断)，接入 SimpleOrchestrator，关键词路由作 fallback；离线评估集 seed 20 条 + `-tags=eval` 框架
 - ✅ **P4 Eino Graph + ReAct Agent 重构** (PR 3) — `internal/chat/workflow/` 新包：Graph 串行编排 (enrich→retrieve→build_prompt→react→wrap) + ReAct Agent 通过 `ExportGraph` 嵌入；`chat.workflow_mode: legacy|graph` 灰度开关，默认 legacy；手写 tool-loop 保留为 safety net
 - ✅ **P1 PR-A 多通道检索骨架** (Wave 2) — `internal/rag/channel/` + `internal/rag/postprocessor/` + `rag.Pipeline`：Vector/BM25 双通道并行 (errgroup + 2s 超时) + Dedup/RRF/Rerank 处理器链 + 零命中回退 legacy；`rag.pipeline_mode: legacy|hybrid` 灰度开关，默认 legacy；30 条 seed golden set + `-tags=eval` A/B 框架
+  - **2026-04-18 baseline**（30 条 seed，云 Redis Stack）：legacy Recall@5=0.967 MRR=0.933；hybrid Recall@5=0.967 MRR=0.917
+  - 两侧同一条 miss（同 golden 盲区）；hybrid MRR 略低因 BM25 默认分词对中文不友好，RRF 融合稀释精准命中
+  - PR-B 核心收益区间：gojieba 中文分词 + MMR 多样性 + Phrase 零命中兜底 + golden set 扩到 120 条
