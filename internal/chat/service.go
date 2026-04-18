@@ -28,18 +28,19 @@ import (
 // It loads system prompt, calls Qwen ChatModel, integrates RAG retrieval,
 // manages session memory, and handles tool calls.
 type Service struct {
-	chatModel     model.ChatModel
-	systemPrompt  string
-	rag           *rag.RAG
-	docsPath     string
-	redisClient  *redis.Client
-	memoryCfg    *config.ChatMemoryConfig
-	compressor   *memory.TokenCountCompressor
-	toolInfos    []*schema.ToolInfo
-	toolMap      map[string]tool.InvokableTool
-	orchestrator *agent.SimpleOrchestrator
-	modelName    string
-	monitor      *monitor.Registry
+	chatModel      model.ChatModel
+	systemPrompt   string
+	rag            *rag.RAG
+	docsPath       string
+	redisClient    *redis.Client
+	memoryCfg      *config.ChatMemoryConfig
+	compressor     memory.Compressor
+	microCompactor *memory.MicroCompactor
+	toolInfos      []*schema.ToolInfo
+	toolMap        map[string]tool.InvokableTool
+	orchestrator   *agent.SimpleOrchestrator
+	modelName      string
+	monitor        *monitor.Registry
 }
 
 // NewService creates a ChatService with the given Qwen chat model and optional RAG.
@@ -69,11 +70,25 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {	ctx := conte
 		DB:       0,
 	})
 
-	// Create compressor
-	compressor := memory.NewTokenCountCompressor(
-		cfg.ChatMemory.Compression.RecentRounds,
-		cfg.ChatMemory.Compression.RecentTokenLimit,
-	)
+	// Create compressor + optional micro compactor based on strategy
+	compressorCfg := memory.Config{
+		Strategy:           cfg.ChatMemory.Compression.Strategy,
+		RecentRounds:       cfg.ChatMemory.Compression.RecentRounds,
+		RecentTokenLimit:   cfg.ChatMemory.Compression.RecentTokenLimit,
+		LLMModel:           cfg.ChatMemory.Compression.LLMModel,
+		APIKey:             cfg.DashScope.APIKey,
+		BaseURL:            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+		SummaryPrompt:      cfg.ChatMemory.Compression.SummaryPrompt,
+		MicroCompactMinLen: cfg.ChatMemory.Compression.MicroCompactThreshold,
+	}
+	compressor, err := memory.NewCompressor(compressorCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build compressor: %w", err)
+	}
+	microCompactor, err := memory.NewMicroCompactor(compressorCfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build micro compactor: %w", err)
+	}
 
 	// Create tools
 	toolInfos, toolMap, err := createTools(cfg, r)
@@ -90,17 +105,18 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {	ctx := conte
 	}
 
 	return &Service{
-		chatModel:    chatModel,
-		systemPrompt: systemPrompt,
-		rag:          r,
-		docsPath:     cfg.RAG.DocsPath,
-		redisClient:  rdb,
-		memoryCfg:    &cfg.ChatMemory,
-		compressor:   compressor,
-		toolInfos:    toolInfos,
-		toolMap:      toolMap,
-		modelName:    cfg.DashScope.ChatModel,
-		monitor:      monitor.DefaultRegistry,
+		chatModel:      chatModel,
+		systemPrompt:   systemPrompt,
+		rag:            r,
+		docsPath:       cfg.RAG.DocsPath,
+		redisClient:    rdb,
+		memoryCfg:      &cfg.ChatMemory,
+		compressor:     compressor,
+		microCompactor: microCompactor,
+		toolInfos:      toolInfos,
+		toolMap:        toolMap,
+		modelName:      cfg.DashScope.ChatModel,
+		monitor:        monitor.DefaultRegistry,
 	}, nil
 }
 
@@ -149,9 +165,8 @@ func createTools(cfg *config.Config, r *rag.RAG) ([]*schema.ToolInfo, map[string
 	return toolInfos, toolMap, nil
 }
 
-// getMemory returns the CompressibleMemory for the given session.
 func (s *Service) getMemory(sessionID int64) *memory.CompressibleMemory {
-	return memory.NewCompressibleMemory(sessionID, s.redisClient, s.memoryCfg, s.compressor)
+	return memory.NewCompressibleMemory(sessionID, s.redisClient, s.memoryCfg, s.compressor, s.microCompactor)
 }
 
 // Chat corresponds to Java aiChat.chat(sessionId, prompt).
@@ -193,6 +208,7 @@ func (s *Service) Chat(ctx context.Context, sessionID int64, prompt string) (str
 
 		// Add assistant message with tool calls to messages
 		messages = append(messages, resp)
+		mem.Add(ctx, resp)
 
 		// Execute each tool call
 		for _, tc := range resp.ToolCalls {
@@ -202,9 +218,9 @@ func (s *Service) Chat(ctx context.Context, sessionID int64, prompt string) (str
 				toolResult = fmt.Sprintf("工具调用失败: %v", err)
 			}
 
-			// Add tool result message
-			messages = append(messages, schema.ToolMessage(toolResult, tc.ID,
-				schema.WithToolName(tc.Function.Name)))
+			toolMsg := schema.ToolMessage(toolResult, tc.ID, schema.WithToolName(tc.Function.Name))
+			messages = append(messages, toolMsg)
+			mem.Add(ctx, toolMsg)
 		}
 
 		// Call model again with tool results
@@ -303,6 +319,7 @@ func (s *Service) StreamChat(ctx context.Context, sessionID int64, prompt string
 		}
 
 		messages = append(messages, resp)
+		mem.Add(ctx, resp)
 
 		for _, tc := range resp.ToolCalls {
 			toolResult, err := s.executeToolCall(ctx, tc)
@@ -310,8 +327,9 @@ func (s *Service) StreamChat(ctx context.Context, sessionID int64, prompt string
 				log.Printf("[ChatService] tool %s execution failed: %v", tc.Function.Name, err)
 				toolResult = fmt.Sprintf("工具调用失败: %v", err)
 			}
-			messages = append(messages, schema.ToolMessage(toolResult, tc.ID,
-				schema.WithToolName(tc.Function.Name)))
+			toolMsg := schema.ToolMessage(toolResult, tc.ID, schema.WithToolName(tc.Function.Name))
+			messages = append(messages, toolMsg)
+			mem.Add(ctx, toolMsg)
 		}
 
 		// Loop continues — next iteration will call Stream again with tool results

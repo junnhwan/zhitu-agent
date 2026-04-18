@@ -57,6 +57,20 @@ func NewCompressor(cfg Config) (Compressor, error) {
 	}
 }
 
+func NewMicroCompactor(cfg Config) (*MicroCompactor, error) {
+	if cfg.Strategy != "hybrid" {
+		return nil, nil
+	}
+	llm, err := resolveLLM(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return &MicroCompactor{
+		Threshold: cfg.MicroCompactMinLen,
+		LLM:       llm,
+	}, nil
+}
+
 func resolveLLM(cfg Config) (model.BaseChatModel, error) {
 	if cfg.LLM != nil {
 		return cfg.LLM, nil

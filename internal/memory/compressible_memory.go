@@ -21,34 +21,38 @@ const (
 // CompressibleMemory implements Redis-backed chat memory with compression.
 // Mirrors Java CompressibleChatMemory — distributed lock + compression + atomic update.
 type CompressibleMemory struct {
-	sessionID         int64
-	client            *redis.Client
-	compressor        *TokenCountCompressor
-	lock              *DistributedLock
-	maxMessages       int
-	tokenThreshold    int
+	sessionID            int64
+	client               *redis.Client
+	compressor           Compressor
+	microCompactor       *MicroCompactor
+	lock                 *DistributedLock
+	maxMessages          int
+	tokenThreshold       int
 	fallbackRecentRounds int
-	ttlSeconds        int
+	ttlSeconds           int
 }
 
-// NewCompressibleMemory creates a chat memory instance for the given session.
-// Mirrors Java chatMemoryProvider — creates a new CompressibleChatMemory per session.
-func NewCompressibleMemory(sessionID int64, client *redis.Client, cfg *config.ChatMemoryConfig, compressor *TokenCountCompressor) *CompressibleMemory {
+func NewCompressibleMemory(sessionID int64, client *redis.Client, cfg *config.ChatMemoryConfig, compressor Compressor, microCompactor *MicroCompactor) *CompressibleMemory {
 	return &CompressibleMemory{
-		sessionID:         sessionID,
-		client:            client,
-		compressor:        compressor,
-		lock:              NewDistributedLock(client, cfg.Redis.Lock.ExpireSeconds, cfg.Redis.Lock.RetryTimes, cfg.Redis.Lock.RetryIntervalMs),
-		maxMessages:       cfg.MaxMessages,
-		tokenThreshold:    cfg.Compression.TokenThreshold,
+		sessionID:            sessionID,
+		client:               client,
+		compressor:           compressor,
+		microCompactor:       microCompactor,
+		lock:                 NewDistributedLock(client, cfg.Redis.Lock.ExpireSeconds, cfg.Redis.Lock.RetryTimes, cfg.Redis.Lock.RetryIntervalMs),
+		maxMessages:          cfg.MaxMessages,
+		tokenThreshold:       cfg.Compression.TokenThreshold,
 		fallbackRecentRounds: cfg.Compression.FallbackRecentRounds,
-		ttlSeconds:        cfg.Redis.TTLSeconds,
+		ttlSeconds:           cfg.Redis.TTLSeconds,
 	}
 }
 
 // Add adds a message to the chat memory with lock + compression logic.
 // Mirrors Java CompressibleChatMemory.add().
 func (m *CompressibleMemory) Add(ctx context.Context, message *schema.Message) {
+	if m.microCompactor != nil {
+		message = m.microCompactor.MessageForMemory(ctx, message)
+	}
+
 	lockKey := fmt.Sprintf("%s%d", lockKeyPrefix, m.sessionID)
 	lockValue, acquired := m.lock.Acquire(ctx, lockKey)
 
