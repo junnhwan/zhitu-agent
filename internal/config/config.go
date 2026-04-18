@@ -50,11 +50,16 @@ type RAGConfig struct {
 	PipelineMode     string                 `mapstructure:"pipeline_mode"`
 	ChannelTimeoutMs int                    `mapstructure:"channel_timeout_ms"`
 	RRF              RAGRRFConfig           `mapstructure:"rrf"`
+	Diversity        RAGDiversityConfig     `mapstructure:"diversity"`
 }
 
 type RAGRRFConfig struct {
 	K                int     `mapstructure:"k"`
 	ConsistencyBonus float64 `mapstructure:"consistency_bonus"`
+}
+
+type RAGDiversityConfig struct {
+	PerFileCap int `mapstructure:"per_file_cap"`
 }
 
 type RAGBaseRetrieverConfig struct {
@@ -196,6 +201,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rag.channel_timeout_ms", 2000)
 	v.SetDefault("rag.rrf.k", 60)
 	v.SetDefault("rag.rrf.consistency_bonus", 1.3)
+	v.SetDefault("rag.diversity.per_file_cap", 2)
 
 	// Mail
 	v.SetDefault("mail.host", "smtp.qq.com")

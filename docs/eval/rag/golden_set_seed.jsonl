@@ -28,3 +28,55 @@
 {"query":"Channel 接口插件化","relevant_keywords":["Channel"]}
 {"query":"FT.SEARCH @content 查询","relevant_keywords":["FT.SEARCH"]}
 {"query":"CJK Token 估算公式","relevant_keywords":["CJK"]}
+{"query":"compose.InvokableLambda 怎么用","relevant_keywords":["InvokableLambda"]}
+{"query":"ToolCallingChatModel 和 ChatModel 区别","relevant_keywords":["ToolCallingChatModel"]}
+{"query":"BindTools 并发 race 问题","relevant_keywords":["BindTools"]}
+{"query":"WithTools 返回新实例","relevant_keywords":["WithTools"]}
+{"query":"ExportGraph 嵌入 ReAct","relevant_keywords":["ExportGraph"]}
+{"query":"REDIS_ADDR 环境变量解析坑","relevant_keywords":["REDIS_ADDR"]}
+{"query":"CounterVec 首次 Inc 才出现","relevant_keywords":["CounterVec"]}
+{"query":"docker-compose environment 优先级","relevant_keywords":["docker-compose"]}
+{"query":"CompressibleMemory 加锁机制","relevant_keywords":["CompressibleMemory"]}
+{"query":"TokenCountCompressor 默认策略","relevant_keywords":["TokenCountCompressor"]}
+{"query":"RecursiveDocumentSplitter 分隔符","relevant_keywords":["Splitter"]}
+{"query":"DashScope embedding v3 维度","relevant_keywords":["embedding","v3"]}
+{"query":"IntentResult Domain Category","relevant_keywords":["IntentResult"]}
+{"query":"gobreaker v2 ReadyToTrip","relevant_keywords":["ReadyToTrip"]}
+{"query":"IntentRouter 接口注入","relevant_keywords":["IntentRouter"]}
+{"query":"keyword fallback 关键词路由","relevant_keywords":["fallback","关键词"]}
+{"query":"enrich retrieve build_prompt 节点","relevant_keywords":["enrich","retrieve"]}
+{"query":"wrapResponse Lambda 折叠流","relevant_keywords":["wrapResponse"]}
+{"query":"StreamChat 绕过 compile Runnable","relevant_keywords":["StreamChat","Runnable"]}
+{"query":"safety net legacy 保留 3 个 release","relevant_keywords":["safety net","legacy"]}
+{"query":"interview-prep-wave1 面试向设计","relevant_keywords":["interview-prep"]}
+{"query":"Phase 1 骨架 RAG 记忆工具多 Agent","relevant_keywords":["Phase 1","骨架"]}
+{"query":"向量存储 Redis Stack 不是 pgvector","relevant_keywords":["Redis Stack","pgvector"]}
+{"query":"Embedding 用 v3 不支持 v4","relevant_keywords":["Embedding","v3"]}
+{"query":"分布式锁 Lua 脚本原子性","relevant_keywords":["Lua","原子"]}
+{"query":"Rerank 降级 fallback 单路向量","relevant_keywords":["Rerank","降级"]}
+{"query":"errgroup 并行通道执行","relevant_keywords":["errgroup"]}
+{"query":"tree.yaml 意图树配置","relevant_keywords":["tree.yaml"]}
+{"query":"JSON 容错正则提取","relevant_keywords":["JSON","正则"]}
+{"query":"connection_pool Redis 客户端配置","relevant_keywords":["Redis","客户端"]}
+{"query":"DocumentSplitter chunk overlap 200","relevant_keywords":["chunk","overlap"]}
+{"query":"orchestrator needKnowledgeRetrieval","relevant_keywords":["orchestrator"]}
+{"query":"WithIntentRouter 注入路由","relevant_keywords":["WithIntentRouter"]}
+{"query":"Prometheus 自定义 metric 注册","relevant_keywords":["metric","注册"]}
+{"query":"Eino 不支持 v4 embedding","relevant_keywords":["Eino","embedding"]}
+{"query":"Guardrail 敏感词 死 杀","relevant_keywords":["Guardrail","敏感"]}
+{"query":"/metrics Prometheus 端点","relevant_keywords":["/metrics"]}
+{"query":"Viper 配置加载 mapstructure","relevant_keywords":["Viper"]}
+{"query":"session 并发 race condition","relevant_keywords":["race"]}
+{"query":"micro compact rag_search top-3","relevant_keywords":["micro","top-3"]}
+{"query":"chat_memory compression strategy simple","relevant_keywords":["compression","simple"]}
+{"query":"workflow_mode legacy graph 切换","relevant_keywords":["workflow_mode"]}
+{"query":"pipeline_mode legacy hybrid 灰度","relevant_keywords":["pipeline_mode"]}
+{"query":"Eval Center 评估中心 Wave 4","relevant_keywords":["Eval Center"]}
+{"query":"AgentX Coding Agent 内核","relevant_keywords":["AgentX"]}
+{"query":"ThoughtCoding 终端 CLI","relevant_keywords":["ThoughtCoding"]}
+{"query":"ai-mcp-gateway WebFlux Guava","relevant_keywords":["ai-mcp-gateway"]}
+{"query":"ai-agent-scaffold-lite Armory Pattern","relevant_keywords":["scaffold-lite"]}
+{"query":"dashscope v3 1024 维","relevant_keywords":["dashscope","1024"]}
+{"query":"finalTopN 5 默认","relevant_keywords":["finalTopN"]}
+{"query":"BaseRetriever min_score 0.55","relevant_keywords":["min_score"]}
+{"query":"Auto reload 5 分钟扫描","relevant_keywords":["AutoReloader"]}

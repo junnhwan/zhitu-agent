@@ -85,11 +85,14 @@ func buildHybridPipeline(
 	procs := []postprocessor.Processor{
 		postprocessor.NewDedup(),
 		postprocessor.NewRRF(cfg.RAG.RRF.K, cfg.RAG.RRF.ConsistencyBonus),
+		postprocessor.NewDiversity(cfg.RAG.Diversity.PerFileCap),
 		postprocessor.NewRerank(rerankClient, cfg.RAG.Rerank.FinalTopN, rerankFallback),
 	}
 
 	timeout := time.Duration(cfg.RAG.ChannelTimeoutMs) * time.Millisecond
-	return NewPipeline(pre, channels, procs, timeout, legacy, cfg.RAG.Rerank.FinalTopN, hooks)
+	phrase := channel.NewPhraseChannel(store.RedisClient, redisIndexName, 10)
+	return NewPipeline(pre, channels, procs, timeout, legacy, cfg.RAG.Rerank.FinalTopN, hooks).
+		WithPhraseFallback(phrase)
 }
 
 // Startup performs all startup tasks: load docs, verify rerank, start auto-reload.

@@ -28,6 +28,8 @@ rag:
   rrf:
     k: 60
     consistency_bonus: 1.3
+  diversity:
+    per_file_cap: 2
 
 mail:
   host: "smtp.qq.com"

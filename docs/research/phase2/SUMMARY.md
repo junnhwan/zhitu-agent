@@ -188,3 +188,6 @@
   - **2026-04-18 baseline**（30 条 seed，云 Redis Stack）：legacy Recall@5=0.967 MRR=0.933；hybrid Recall@5=0.967 MRR=0.917
   - 两侧同一条 miss（同 golden 盲区）；hybrid MRR 略低因 BM25 默认分词对中文不友好，RRF 融合稀释精准命中
   - PR-B 核心收益区间：gojieba 中文分词 + MMR 多样性 + Phrase 零命中兜底 + golden set 扩到 120 条
+- ✅ **P1 PR-B1 三级兜底 + 多样性 + 短语兜底** (Wave 2) — 新增 PhraseChannel（RediSearch 精确短语匹配）+ DiversityProcessor（同文件 cap 2）+ 三级兜底（channels→phrase→legacy）+ Domain ctx 透传（预留 B2 消费）；golden set 扩到 80 条
+  - **2026-04-18 扩量 baseline**（80 条）：legacy Recall@5=0.805 MRR=0.751；hybrid Recall@5=0.793 MRR=0.734
+  - Recall 差距 1.2%（采样噪声内），phrase fallback 触发 3 次；差距主因仍是 BM25 中文分词差 —— PR-B2 上 go-ego/gse 后预期可拉平并超越

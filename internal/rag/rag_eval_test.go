@@ -143,6 +143,7 @@ func TestRagAB(t *testing.T) {
 	cfg.RAG.ChannelTimeoutMs = 2000
 	cfg.RAG.RRF.K = 60
 	cfg.RAG.RRF.ConsistencyBonus = 1.3
+	cfg.RAG.Diversity.PerFileCap = 2
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -163,12 +164,14 @@ func TestRagAB(t *testing.T) {
 	procs := []postprocessor.Processor{
 		postprocessor.NewDedup(),
 		postprocessor.NewRRF(cfg.RAG.RRF.K, cfg.RAG.RRF.ConsistencyBonus),
+		postprocessor.NewDiversity(cfg.RAG.Diversity.PerFileCap),
 		postprocessor.NewRerank(rerankClient, cfg.RAG.Rerank.FinalTopN, metrics.RecordRAGRerankFallback),
 	}
 	hybrid := NewPipeline(pre, channels, procs,
 		time.Duration(cfg.RAG.ChannelTimeoutMs)*time.Millisecond,
 		legacy, cfg.RAG.Rerank.FinalTopN,
-		PipelineHooks{OnChannelFailed: metrics.RecordRAGChannelFailed, OnZeroHit: metrics.RecordRAGZeroHit})
+		PipelineHooks{OnChannelFailed: metrics.RecordRAGChannelFailed, OnZeroHit: metrics.RecordRAGZeroHit}).
+		WithPhraseFallback(channel.NewPhraseChannel(store.RedisClient, redisIndexName, 10))
 
 	samples := loadGoldenSet(t, "../../docs/eval/rag/golden_set_seed.jsonl")
 	t.Logf("loaded %d golden samples", len(samples))
