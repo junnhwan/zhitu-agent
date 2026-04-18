@@ -200,3 +200,4 @@
   - **顺序调整**：DiversityProcessor 从 RRF 后挪到 Rerank 后 — 之前 diversity cap 2 在 rerank 前会丢同源相关 chunk，rerank 候选池被压缩
   - **120 条 baseline**：legacy Recall@5=0.758 MRR=0.702；hybrid Recall@5=0.750 MRR=**0.705 (反超 legacy)**
   - 结论：hybrid ≈ legacy（Recall 差 0.8% ~ 1 样本采样噪声），MRR 已反超 0.3%。完整骨架打通且不退化，进一步收益要靠 RRF 超参 sweep / 更大 golden / 更细 query 类型分桶
+- ✅ **P5 PR-C1 MCP Client** (Wave 3，2026-04-18) — `internal/mcp/client/`：SSE + Stdio 双传输（mark3labs/mcp-go v0.46 + eino-ext tool/mcp v0.0.8），多 server 注册表，工具名冲突自动加 `{serverName}__` 前缀，单 server 失败跳过不阻断。`chat/service.go` 在 `createTools` 里合并本地 tool + MCP tool 一起 `WithTools` 绑 model。`mcp.client.enabled` 默认关，零风险。Prometheus 指标：`mcp_client_tools_total{server}` / `mcp_client_calls_total{server,tool,status}` / `mcp_client_call_duration_seconds`。`-tags=mcp` 集成测试对 `@modelcontextprotocol/server-everything` stdio 跑通：拉到 13 个工具，`echo` 调用端到端 5.9s。
