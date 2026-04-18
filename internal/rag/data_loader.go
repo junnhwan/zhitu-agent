@@ -31,14 +31,18 @@ func (dl *DataLoader) Load(ctx context.Context) {
 	log.Printf("[DataLoader] === RAG document loading start ===")
 	log.Printf("[DataLoader] docs path: %s", dl.docsPath)
 
-	dirInfo, err := os.Stat(dl.docsPath)
+	absDocs, err := filepath.Abs(dl.docsPath)
+	if err != nil {
+		absDocs = dl.docsPath
+	}
+	dirInfo, err := os.Stat(absDocs)
 	if err != nil || !dirInfo.IsDir() {
-		log.Printf("[DataLoader] docs directory does not exist: %s", dl.docsPath)
+		log.Printf("[DataLoader] docs directory does not exist: %s", absDocs)
 		return
 	}
 
 	var docs []*schema.Document
-	if err := dl.scanDirectory(dl.docsPath, &docs); err != nil {
+	if err := dl.scanDirectory(absDocs, absDocs, &docs); err != nil {
 		log.Printf("[DataLoader] scan failed: %v", err)
 		return
 	}
@@ -57,7 +61,7 @@ func (dl *DataLoader) Load(ctx context.Context) {
 	log.Printf("[DataLoader] === RAG document loading complete — %d documents processed ===", len(docs))
 }
 
-func (dl *DataLoader) scanDirectory(dir string, docs *[]*schema.Document) error {
+func (dl *DataLoader) scanDirectory(root, dir string, docs *[]*schema.Document) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
@@ -67,7 +71,7 @@ func (dl *DataLoader) scanDirectory(dir string, docs *[]*schema.Document) error 
 		fullPath := filepath.Join(dir, entry.Name())
 
 		if entry.IsDir() {
-			if err := dl.scanDirectory(fullPath, docs); err != nil {
+			if err := dl.scanDirectory(root, fullPath, docs); err != nil {
 				log.Printf("[DataLoader] scan subdir %s failed: %v", fullPath, err)
 			}
 			continue
@@ -89,16 +93,23 @@ func (dl *DataLoader) scanDirectory(dir string, docs *[]*schema.Document) error 
 			continue
 		}
 
+		// Doc ID 用相对 docs 根的 forward-slash 路径，保证不同 CWD 下 ID 一致。
+		rel, err := filepath.Rel(root, fullPath)
+		if err != nil {
+			rel = fullPath
+		}
+		rel = filepath.ToSlash(rel)
+
 		doc := &schema.Document{
-			ID:      fullPath,
+			ID:      rel,
 			Content: content,
 			MetaData: map[string]any{
 				"file_name": name,
-				"file_path": fullPath,
+				"file_path": rel,
 			},
 		}
 		*docs = append(*docs, doc)
-		log.Printf("[DataLoader] loaded: %s (%d chars)", name, len(content))
+		log.Printf("[DataLoader] loaded: %s (%d chars)", rel, len(content))
 	}
 
 	return nil

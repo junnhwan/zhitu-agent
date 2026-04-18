@@ -191,3 +191,7 @@
 - ✅ **P1 PR-B1 三级兜底 + 多样性 + 短语兜底** (Wave 2) — 新增 PhraseChannel（RediSearch 精确短语匹配）+ DiversityProcessor（同文件 cap 2）+ 三级兜底（channels→phrase→legacy）+ Domain ctx 透传（预留 B2 消费）；golden set 扩到 80 条
   - **2026-04-18 扩量 baseline**（80 条）：legacy Recall@5=0.805 MRR=0.751；hybrid Recall@5=0.793 MRR=0.734
   - Recall 差距 1.2%（采样噪声内），phrase fallback 触发 3 次；差距主因仍是 BM25 中文分词差 —— PR-B2 上 go-ego/gse 后预期可拉平并超越
+- ✅ **P1 PR-B2 gse 中文分词 + 双字段索引** (Wave 2) — 新包 `internal/rag/tokenizer/` (gse 纯 Go 懒加载) + Indexer 入库时注入 `content_tokenized` MetaData + Store schema 加 `content_tokenized TEXT` (weight 1.5) + BM25Channel.WithTokenizedField 切到新字段 + DataLoader ID 改相对路径（跨 CWD 一致）
+  - **2026-04-18 干净重建索引**（82 条 golden）：legacy Recall@5=0.817 MRR=0.753；hybrid Recall@5=0.793 MRR=0.736
+  - hybrid ≈ legacy（差距在 2% 采样噪声内），BM25 plumbing 验证通过；真实收益要等 golden set 补充更多 BM25 擅长的 query（错误码 / API 精确匹配 / 数字 ID）才能拉开差距
+  - 切 hybrid 启动时 FT.INFO 检测 `content_tokenized` 字段缺失会自动 DROPINDEX+CREATE（不删 HASH，DataLoader 会重新 HSET 回写）

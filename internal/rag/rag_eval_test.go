@@ -20,6 +20,7 @@ import (
 	"github.com/zhitu-agent/zhitu-agent/internal/monitor"
 	"github.com/zhitu-agent/zhitu-agent/internal/rag/channel"
 	"github.com/zhitu-agent/zhitu-agent/internal/rag/postprocessor"
+	"github.com/zhitu-agent/zhitu-agent/internal/rag/tokenizer"
 )
 
 type goldenSample struct {
@@ -145,10 +146,10 @@ func TestRagAB(t *testing.T) {
 	cfg.RAG.RRF.ConsistencyBonus = 1.3
 	cfg.RAG.Diversity.PerFileCap = 2
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	store, err := NewStore(ctx, cfg)
+	store, err := NewStore(ctx, cfg, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,10 +157,31 @@ func TestRagAB(t *testing.T) {
 	pre := NewQueryPreprocessor()
 	legacy := NewReRankingRetriever(store, rerankClient, cfg, pre)
 
+	tok, tokErr := tokenizer.Default()
+	if tokErr != nil {
+		t.Logf("tokenizer init failed: %v — hybrid will fall back", tokErr)
+	}
+
+	// Re-ingest if requested (RAG_RELOAD_DOCS=true) to populate content_tokenized field.
+	if os.Getenv("RAG_RELOAD_DOCS") == "true" {
+		// 测试 CWD 是 internal/rag，固定到 repo 根目录的 docs
+		cfg.RAG.DocsPath = "../../docs"
+		if _, statErr := os.Stat(cfg.RAG.DocsPath); statErr != nil {
+			t.Fatalf("docs path %s not found: %v", cfg.RAG.DocsPath, statErr)
+		}
+		idx := NewIndexer(store, cfg).WithTokenizer(tok)
+		t.Logf("reloading docs from %s ...", cfg.RAG.DocsPath)
+		NewDataLoader(cfg.RAG.DocsPath, idx).Load(ctx)
+	}
+
 	metrics := monitor.DefaultRegistry.AiMetrics
+	bm25 := channel.NewBM25Channel(store.RedisClient, redisIndexName, 20)
+	if tok != nil {
+		bm25 = bm25.WithTokenizedField(tok.Tokenize)
+	}
 	channels := []channel.Channel{
 		channel.NewVectorChannel(store.Retriever, cfg.RAG.BaseRetriever.MinScore),
-		channel.NewBM25Channel(store.RedisClient, redisIndexName, 20),
+		bm25,
 	}
 	procs := []postprocessor.Processor{
 		postprocessor.NewDedup(),

@@ -9,6 +9,7 @@ import (
 	"github.com/zhitu-agent/zhitu-agent/internal/monitor"
 	"github.com/zhitu-agent/zhitu-agent/internal/rag/channel"
 	"github.com/zhitu-agent/zhitu-agent/internal/rag/postprocessor"
+	"github.com/zhitu-agent/zhitu-agent/internal/rag/tokenizer"
 )
 
 // RAG is the top-level RAG system that holds all components.
@@ -35,12 +36,23 @@ func NewRAG(ctx context.Context, cfg *config.Config, metrics *monitor.AiMetrics)
 	rerankClient := NewQwenRerankClient(cfg.DashScope.APIKey, cfg.DashScope.RerankModel)
 	queryPreprocessor := NewQueryPreprocessor()
 
+	var tok *tokenizer.Tokenizer
+	if needsTokenized {
+		t, err := tokenizer.Default()
+		if err != nil {
+			log.Printf("[RAG] tokenizer init failed, BM25 will use raw content field: %v", err)
+		} else {
+			tok = t
+			indexer = indexer.WithTokenizer(tok)
+		}
+	}
+
 	legacy := NewReRankingRetriever(store, rerankClient, cfg, queryPreprocessor)
 
 	var retriever Retriever = legacy
 	if cfg.RAG.PipelineMode == "hybrid" {
-		retriever = buildHybridPipeline(cfg, store, rerankClient, queryPreprocessor, legacy, metrics)
-		log.Printf("[RAG] pipeline_mode=hybrid — multi-channel enabled")
+		retriever = buildHybridPipeline(cfg, store, rerankClient, queryPreprocessor, legacy, metrics, tok)
+		log.Printf("[RAG] pipeline_mode=hybrid — multi-channel enabled (tokenized=%v)", tok != nil)
 	} else {
 		log.Printf("[RAG] pipeline_mode=legacy — single-channel vector+rerank")
 	}
@@ -68,10 +80,15 @@ func buildHybridPipeline(
 	pre *QueryPreprocessor,
 	legacy Retriever,
 	metrics *monitor.AiMetrics,
+	tok *tokenizer.Tokenizer,
 ) *Pipeline {
+	bm25 := channel.NewBM25Channel(store.RedisClient, redisIndexName, 20)
+	if tok != nil {
+		bm25 = bm25.WithTokenizedField(tok.Tokenize)
+	}
 	channels := []channel.Channel{
 		channel.NewVectorChannel(store.Retriever, cfg.RAG.BaseRetriever.MinScore),
-		channel.NewBM25Channel(store.RedisClient, redisIndexName, 20),
+		bm25,
 	}
 
 	hooks := PipelineHooks{}
