@@ -8,21 +8,29 @@ import (
 	"github.com/cloudwego/eino/schema"
 
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
+	"github.com/zhitu-agent/zhitu-agent/internal/rag/tokenizer"
 )
 
 // Indexer orchestrates document ingestion: split → embed → store.
 // Mirrors Java EmbeddingStoreIngestor.
 type Indexer struct {
-	store   *Store
-	splitter *RecursiveDocumentSplitter
+	store     *Store
+	splitter  *RecursiveDocumentSplitter
+	tokenizer *tokenizer.Tokenizer
 }
 
 // NewIndexer creates a document indexer with the given store and config.
 func NewIndexer(store *Store, cfg *config.Config) *Indexer {
 	return &Indexer{
-		store:   store,
+		store:    store,
 		splitter: NewRecursiveDocumentSplitter(800, 200),
 	}
+}
+
+// WithTokenizer 注入分词器，入库时会在每段 MetaData 里注入 content_tokenized。
+func (idx *Indexer) WithTokenizer(tk *tokenizer.Tokenizer) *Indexer {
+	idx.tokenizer = tk
+	return idx
 }
 
 // Ingest splits documents, transforms segments (prepend file_name), and stores them.
@@ -35,6 +43,14 @@ func (idx *Indexer) Ingest(ctx context.Context, docs []*schema.Document) error {
 	var allSegments []*schema.Document
 	for _, doc := range docs {
 		segments := idx.splitter.SplitDocument(doc)
+		if idx.tokenizer != nil {
+			for _, seg := range segments {
+				if seg.MetaData == nil {
+					seg.MetaData = map[string]any{}
+				}
+				seg.MetaData["content_tokenized"] = idx.tokenizer.Tokenize(seg.Content)
+			}
+		}
 		allSegments = append(allSegments, segments...)
 		log.Printf("[Indexer] document '%s' -> %d segments", doc.ID, len(segments))
 	}

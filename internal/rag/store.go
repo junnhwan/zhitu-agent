@@ -20,15 +20,18 @@ const (
 
 // Store holds the Redis-based indexer and retriever.
 type Store struct {
-	RedisClient *redis.Client
-	Indexer     *redisindexer.Indexer
-	Retriever   *redisretriever.Retriever
-	Embedder    *dashscope.Embedder
+	RedisClient    *redis.Client
+	Indexer        *redisindexer.Indexer
+	Retriever      *redisretriever.Retriever
+	Embedder       *dashscope.Embedder
+	HasTokenizedIx bool
 }
 
 // NewStore initializes the Redis client, embedding model, indexer, and retriever.
 // It also creates the RediSearch vector index if it does not exist.
-func NewStore(ctx context.Context, cfg *config.Config) (*Store, error) {
+// needsTokenized=true 会确保索引含 content_tokenized TEXT 字段（hybrid 模式需要，
+// 缺字段时 drop+重建，docs 不丢，DataLoader 下一步会 HSET 回写所有字段）。
+func NewStore(ctx context.Context, cfg *config.Config, needsTokenized bool) (*Store, error) {
 	// 1. Create Redis client with Protocol:2 + UnstableResp3:true (required for FT.SEARCH)
 	redisAddr := fmt.Sprintf("%s:%d", cfg.Redis.Host, cfg.Redis.Port)
 	rdb := redis.NewClient(&redis.Options{
@@ -58,11 +61,11 @@ func NewStore(ctx context.Context, cfg *config.Config) (*Store, error) {
 	log.Printf("[Store] DashScope embedder created (model=%s, dims=%d)", cfg.DashScope.EmbeddingModel, dims)
 
 	// 3. Create RediSearch vector index (idempotent — skip if exists)
-	if err := createIndexIfNotExists(ctx, rdb, redisIndexName, redisKeyPrefix, dims); err != nil {
+	if err := ensureIndex(ctx, rdb, redisIndexName, redisKeyPrefix, dims, needsTokenized); err != nil {
 		// Log warning but don't fail — index may already exist from a different client
 		log.Printf("[Store] Warning: FT.CREATE failed (may already exist): %v", err)
 	}
-	log.Printf("[Store] RediSearch index '%s' ready", redisIndexName)
+	log.Printf("[Store] RediSearch index '%s' ready (tokenized=%v)", redisIndexName, needsTokenized)
 
 	// 4. Create Redis indexer
 	indexer, err := redisindexer.NewIndexer(ctx, &redisindexer.IndexerConfig{
@@ -90,53 +93,70 @@ func NewStore(ctx context.Context, cfg *config.Config) (*Store, error) {
 	log.Printf("[Store] Redis indexer + retriever ready (TopK=%d)", topK)
 
 	return &Store{
-		RedisClient: rdb,
-		Indexer:     indexer,
-		Retriever:   retriever,
-		Embedder:    embedder,
+		RedisClient:    rdb,
+		Indexer:        indexer,
+		Retriever:      retriever,
+		Embedder:       embedder,
+		HasTokenizedIx: needsTokenized,
 	}, nil
 }
 
-// createIndexIfNotExists creates a RediSearch vector index using FT.CREATE.
-// This is required before the retriever can perform FT.SEARCH.
-func createIndexIfNotExists(ctx context.Context, rdb *redis.Client, indexName, keyPrefix string, dimensions int) error {
-	// Check if index already exists
-	err := rdb.FTInfo(ctx, indexName).Err()
+// ensureIndex creates the index if missing, or recreates it when needsTokenized is requested
+// but the existing index lacks the content_tokenized attribute. FT.DROPINDEX without DD
+// keeps the underlying hashes — re-ingest on startup rewrites them with the new field.
+func ensureIndex(ctx context.Context, rdb *redis.Client, indexName, keyPrefix string, dimensions int, needsTokenized bool) error {
+	info, err := rdb.FTInfo(ctx, indexName).Result()
 	if err == nil {
-		// Index exists
-		return nil
+		if !needsTokenized || indexHasAttribute(info, "content_tokenized") {
+			return nil
+		}
+		log.Printf("[Store] existing index lacks content_tokenized, dropping for rebuild")
+		_ = rdb.FTDropIndex(ctx, indexName).Err()
+	} else {
+		log.Printf("[Store] Index '%s' does not exist, creating...", indexName)
 	}
-	// If error is "unknown index name", create it; otherwise propagate
-	log.Printf("[Store] Index '%s' does not exist, creating...", indexName)
+	return createIndex(ctx, rdb, indexName, keyPrefix, dimensions, needsTokenized)
+}
 
-	// FT.CREATE zhitu_docs_idx
-	//   ON HASH PREFIX 1 zhitu:doc:
-	//   SCHEMA content TEXT vector_content VECTOR FLAT 6 TYPE FLOAT32 DIM 1024 DISTANCE_METRIC COSINE
-	createCmd := rdb.FTCreate(ctx, indexName,
-		&redis.FTCreateOptions{
-			OnHash: true,
-			Prefix: []interface{}{keyPrefix},
-		},
-		&redis.FieldSchema{
-			FieldName: "content",
+func indexHasAttribute(info redis.FTInfoResult, name string) bool {
+	for _, a := range info.Attributes {
+		if a.Attribute == name || a.Identifier == name {
+			return true
+		}
+	}
+	return false
+}
+
+// createIndex builds the RediSearch vector index. When tokenized is true, an extra
+// content_tokenized TEXT field (weight 1.5) is added for BM25 over gse-tokenized text.
+func createIndex(ctx context.Context, rdb *redis.Client, indexName, keyPrefix string, dimensions int, tokenized bool) error {
+	schemas := []*redis.FieldSchema{
+		{FieldName: "content", FieldType: redis.SearchFieldTypeText},
+		{FieldName: "file_name", FieldType: redis.SearchFieldTypeText},
+	}
+	if tokenized {
+		schemas = append(schemas, &redis.FieldSchema{
+			FieldName: "content_tokenized",
 			FieldType: redis.SearchFieldTypeText,
-		},
-		&redis.FieldSchema{
-			FieldName: "file_name",
-			FieldType: redis.SearchFieldTypeText,
-		},
-		&redis.FieldSchema{
-			FieldName: "vector_content",
-			FieldType: redis.SearchFieldTypeVector,
-			VectorArgs: &redis.FTVectorArgs{
-				FlatOptions: &redis.FTFlatOptions{
-					Type:           "FLOAT32",
-					Dim:            dimensions,
-					DistanceMetric: "COSINE",
-				},
+			Weight:    1.5,
+		})
+	}
+	schemas = append(schemas, &redis.FieldSchema{
+		FieldName: "vector_content",
+		FieldType: redis.SearchFieldTypeVector,
+		VectorArgs: &redis.FTVectorArgs{
+			FlatOptions: &redis.FTFlatOptions{
+				Type:           "FLOAT32",
+				Dim:            dimensions,
+				DistanceMetric: "COSINE",
 			},
 		},
-	)
+	})
 
-	return createCmd.Err()
+	args := make([]*redis.FieldSchema, len(schemas))
+	copy(args, schemas)
+	return rdb.FTCreate(ctx, indexName,
+		&redis.FTCreateOptions{OnHash: true, Prefix: []interface{}{keyPrefix}},
+		args...,
+	).Err()
 }

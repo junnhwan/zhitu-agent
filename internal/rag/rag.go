@@ -25,7 +25,8 @@ type RAG struct {
 
 // NewRAG initializes all RAG components and returns a fully wired RAG system.
 func NewRAG(ctx context.Context, cfg *config.Config, metrics *monitor.AiMetrics) (*RAG, error) {
-	store, err := NewStore(ctx, cfg)
+	needsTokenized := cfg.RAG.PipelineMode == "hybrid"
+	store, err := NewStore(ctx, cfg, needsTokenized)
 	if err != nil {
 		return nil, err
 	}
