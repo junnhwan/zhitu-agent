@@ -68,3 +68,7 @@ understand:
   llm_model: "qwen-turbo"
   confidence_threshold: 0.6
   max_clarify_attempts: 3
+
+chat:
+  workflow_mode: legacy
+  max_react_steps: 10

@@ -23,6 +23,7 @@ import (
 	"github.com/zhitu-agent/zhitu-agent/internal/rag"
 	ztool "github.com/zhitu-agent/zhitu-agent/internal/tool"
 	"github.com/zhitu-agent/zhitu-agent/internal/understand"
+	"github.com/zhitu-agent/zhitu-agent/internal/chat/workflow"
 )
 
 // Service implements the core chat logic, mirroring Java AiChat + AiChatService.
@@ -41,6 +42,8 @@ type Service struct {
 	toolMap        map[string]tool.InvokableTool
 	orchestrator   *agent.SimpleOrchestrator
 	intentRouter   *understand.Service
+	workflow       *workflow.ChatWorkflow
+	workflowMode   string
 	modelName      string
 	monitor        *monitor.Registry
 }
@@ -130,6 +133,28 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {	ctx := conte
 		log.Printf("[ChatService] understand service enabled (model=%s)", cfg.Understand.LLMModel)
 	}
 
+	// Optional graph-based workflow (灰度开关)
+	var chatWorkflow *workflow.ChatWorkflow
+	workflowMode := cfg.Chat.WorkflowMode
+	if workflowMode == "graph" {
+		baseTools := make([]tool.BaseTool, 0, len(toolMap))
+		for _, t := range toolMap {
+			baseTools = append(baseTools, t)
+		}
+		chatWorkflow, err = workflow.NewChatWorkflow(ctx, &workflow.Deps{
+			ChatModel:     chatModel,
+			Tools:         baseTools,
+			IntentRouter:  intentRouter,
+			RAG:           r,
+			SystemPrompt:  systemPrompt,
+			MaxReActSteps: cfg.Chat.MaxReActSteps,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to build chat workflow: %w", err)
+		}
+		log.Printf("[ChatService] graph workflow enabled")
+	}
+
 	return &Service{
 		chatModel:      chatModel,
 		systemPrompt:   systemPrompt,
@@ -144,6 +169,8 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {	ctx := conte
 		modelName:      cfg.DashScope.ChatModel,
 		monitor:        monitor.DefaultRegistry,
 		intentRouter:   intentRouter,
+		workflow:       chatWorkflow,
+		workflowMode:   workflowMode,
 	}, nil
 }
 
@@ -216,6 +243,10 @@ func (s *Service) Chat(ctx context.Context, sessionID int64, prompt string) (str
 	// Record request start
 	s.monitor.AiMetrics.RecordRequest(userIDStr, sessionIDStr, s.modelName, "started")
 	s.monitor.Logger.LogRequest("AI_CHAT", "model", s.modelName, "session", sessionIDStr)
+
+	if s.workflow != nil && s.workflowMode == "graph" {
+		return s.chatViaWorkflow(ctx, sessionID, prompt)
+	}
 
 	mem := s.getMemory(sessionID)
 	messages := s.buildMessages(ctx, mem, prompt)
@@ -533,4 +564,34 @@ func loadSystemPrompt() (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(data)), nil
+}
+
+// chatViaWorkflow routes a chat request through the Eino graph workflow.
+// Keeps memory I/O outside the graph — we pre-fetch history and post-write
+// the exchange, which simplifies node types and keeps the legacy memory
+// compression / micro-compact path in the same place as the legacy chain.
+func (s *Service) chatViaWorkflow(ctx context.Context, sessionID int64, prompt string) (string, error) {
+	mem := s.getMemory(sessionID)
+	var history []*schema.Message
+	if mem != nil {
+		history = mem.GetMessages(ctx)
+	}
+
+	resp, err := s.workflow.Invoke(ctx, &workflow.Request{
+		SessionID: sessionID,
+		Prompt:    prompt,
+		History:   history,
+	})
+	if err != nil {
+		return "", fmt.Errorf("workflow invoke: %w", err)
+	}
+	if resp == nil || resp.Message == nil {
+		return "", fmt.Errorf("workflow returned empty response")
+	}
+
+	if mem != nil {
+		mem.Add(ctx, schema.UserMessage(prompt))
+		mem.Add(ctx, resp.Message)
+	}
+	return resp.Message.Content, nil
 }

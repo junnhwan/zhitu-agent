@@ -19,6 +19,7 @@ type Config struct {
 	Rerank     RerankConfig     `mapstructure:"rerank"`
 	Monitoring MonitoringConfig `mapstructure:"monitoring"`
 	Understand UnderstandConfig `mapstructure:"understand"`
+	Chat       ChatConfig       `mapstructure:"chat"`
 }
 
 type ServerConfig struct {
@@ -124,6 +125,11 @@ type UnderstandConfig struct {
 	LLMModel             string  `mapstructure:"llm_model"`
 	ConfidenceThreshold  float64 `mapstructure:"confidence_threshold"`
 	MaxClarifyAttempts   int     `mapstructure:"max_clarify_attempts"`
+}
+
+type ChatConfig struct {
+	WorkflowMode  string `mapstructure:"workflow_mode"`
+	MaxReActSteps int    `mapstructure:"max_react_steps"`
 }
 
 func Load(configPath string) (*Config, error) {
