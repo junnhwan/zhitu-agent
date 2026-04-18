@@ -19,6 +19,7 @@ import (
 	"github.com/zhitu-agent/zhitu-agent/internal/agent"
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
 	"github.com/zhitu-agent/zhitu-agent/internal/memory"
+	mcpclient "github.com/zhitu-agent/zhitu-agent/internal/mcp/client"
 	"github.com/zhitu-agent/zhitu-agent/internal/monitor"
 	"github.com/zhitu-agent/zhitu-agent/internal/rag"
 	ztool "github.com/zhitu-agent/zhitu-agent/internal/tool"
@@ -40,6 +41,7 @@ type Service struct {
 	microCompactor *memory.MicroCompactor
 	toolInfos      []*schema.ToolInfo
 	toolMap        map[string]tool.InvokableTool
+	mcpClient      *mcpclient.Client
 	orchestrator   *agent.SimpleOrchestrator
 	intentRouter   *understand.Service
 	workflow       *workflow.ChatWorkflow
@@ -95,10 +97,26 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {	ctx := conte
 		return nil, fmt.Errorf("failed to build micro compactor: %w", err)
 	}
 
-	// Create tools
+	// Create tools (local + MCP remote)
 	toolInfos, toolMap, err := createTools(cfg, r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tools: %w", err)
+	}
+	mcpClient := mcpclient.NewClient(ctx, cfg.MCP.Client)
+	mcpInfos, err := mcpClient.ToolInfos(ctx)
+	if err != nil {
+		log.Printf("[ChatService] mcp tool infos failed: %v", err)
+	}
+	for name, t := range mcpClient.ToolMap(ctx) {
+		if _, exists := toolMap[name]; exists {
+			log.Printf("[ChatService] WARN mcp tool %q shadowed by local tool", name)
+			continue
+		}
+		toolMap[name] = t
+	}
+	toolInfos = append(toolInfos, mcpInfos...)
+	if len(mcpInfos) > 0 {
+		log.Printf("[ChatService] merged %d MCP tools", len(mcpInfos))
 	}
 
 	// Bind tools to chat model (WithTools returns a new concurrency-safe instance)
@@ -168,12 +186,21 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {	ctx := conte
 		microCompactor: microCompactor,
 		toolInfos:      toolInfos,
 		toolMap:        toolMap,
+		mcpClient:      mcpClient,
 		modelName:      cfg.DashScope.ChatModel,
 		monitor:        monitor.DefaultRegistry,
 		intentRouter:   intentRouter,
 		workflow:       chatWorkflow,
 		workflowMode:   workflowMode,
 	}, nil
+}
+
+// Shutdown 释放 Service 持有的外部资源（当前主要是 MCP client 的子进程 / SSE 连接）。
+func (s *Service) Shutdown() error {
+	if s.mcpClient != nil {
+		return s.mcpClient.Close()
+	}
+	return nil
 }
 
 // InitOrchestrator initializes the multi-agent orchestrator.
