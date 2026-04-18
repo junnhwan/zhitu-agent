@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cloudwego/eino/schema"
@@ -19,7 +20,7 @@ func TestTokenCountCompressorCompress(t *testing.T) {
 		}
 	}
 
-	compressed := c.Compress(msgs)
+	compressed := c.Compress(context.Background(), msgs)
 
 	// Should have: 1 summary + 4 recent (2 rounds)
 	if len(compressed) != 5 {
@@ -41,7 +42,7 @@ func TestTokenCountCompressorNoCompress(t *testing.T) {
 		schema.AssistantMessage("hi", nil),
 	}
 
-	compressed := c.Compress(msgs)
+	compressed := c.Compress(context.Background(), msgs)
 	if len(compressed) != 2 {
 		t.Errorf("len(compressed) = %d, want 2 (no compression)", len(compressed))
 	}

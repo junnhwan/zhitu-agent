@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math"
@@ -29,7 +30,7 @@ func NewTokenCountCompressor(recentRounds, recentTokenLimit int) *TokenCountComp
 // Compress splits messages into old and recent, generates a summary from old messages,
 // and returns [summary + recent messages].
 // Mirrors Java TokenCountChatMemoryCompressor.compress().
-func (c *TokenCountCompressor) Compress(messages []*schema.Message) []*schema.Message {
+func (c *TokenCountCompressor) Compress(_ context.Context, messages []*schema.Message) []*schema.Message {
 	if len(messages) <= c.recentRounds*2 {
 		return messages
 	}

@@ -78,7 +78,7 @@ func (m *CompressibleMemory) Add(ctx context.Context, message *schema.Message) {
 		log.Printf("[Memory] session %d triggering compression — msgs: %d/%d, tokens: %d/%d",
 			m.sessionID, len(messages), m.maxMessages, currentTokenCount, m.tokenThreshold)
 
-		compressed, err := m.tryCompress(messages)
+		compressed, err := m.tryCompress(ctx, messages)
 		if err != nil {
 			log.Printf("[Memory] session %d compression failed, falling back to recent %d rounds: %v",
 				m.sessionID, m.fallbackRecentRounds, err)
@@ -126,11 +126,11 @@ func (m *CompressibleMemory) Clear(ctx context.Context) {
 }
 
 // tryCompress attempts to compress messages using the compressor.
-func (m *CompressibleMemory) tryCompress(messages []*schema.Message) ([]*schema.Message, error) {
+func (m *CompressibleMemory) tryCompress(ctx context.Context, messages []*schema.Message) ([]*schema.Message, error) {
 	if m.compressor == nil {
 		return messages, nil
 	}
-	compressed := m.compressor.Compress(messages)
+	compressed := m.compressor.Compress(ctx, messages)
 	return compressed, nil
 }
 
