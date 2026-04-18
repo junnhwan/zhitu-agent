@@ -36,6 +36,9 @@ bigmodel:
 chat_memory:
   max_messages: 20
   compression:
+    strategy: "simple"
+    llm_model: "qwen-turbo"
+    micro_compact_threshold: 2000
     token_threshold: 6000
     recent_rounds: 5
     recent_token_limit: 2000

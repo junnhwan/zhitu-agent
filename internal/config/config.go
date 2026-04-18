@@ -70,12 +70,15 @@ type ChatMemoryConfig struct {
 }
 
 type ChatMemoryCompressionConfig struct {
-	TokenThreshold      int    `mapstructure:"token_threshold"`
-	RecentRounds        int    `mapstructure:"recent_rounds"`
-	RecentTokenLimit    int    `mapstructure:"recent_token_limit"`
-	SummaryTokenLimit   int    `mapstructure:"summary_token_limit"`
-	SummaryPrompt       string `mapstructure:"summary_prompt"`
-	FallbackRecentRounds int   `mapstructure:"fallback_recent_rounds"`
+	Strategy             string `mapstructure:"strategy"`
+	LLMModel             string `mapstructure:"llm_model"`
+	MicroCompactThreshold int    `mapstructure:"micro_compact_threshold"`
+	TokenThreshold       int    `mapstructure:"token_threshold"`
+	RecentRounds         int    `mapstructure:"recent_rounds"`
+	RecentTokenLimit     int    `mapstructure:"recent_token_limit"`
+	SummaryTokenLimit    int    `mapstructure:"summary_token_limit"`
+	SummaryPrompt        string `mapstructure:"summary_prompt"`
+	FallbackRecentRounds int    `mapstructure:"fallback_recent_rounds"`
 }
 
 type ChatMemoryRedisConfig struct {
@@ -173,6 +176,9 @@ func setDefaults(v *viper.Viper) {
 
 	// Chat Memory
 	v.SetDefault("chat_memory.max_messages", 20)
+	v.SetDefault("chat_memory.compression.strategy", "simple")
+	v.SetDefault("chat_memory.compression.llm_model", "qwen-turbo")
+	v.SetDefault("chat_memory.compression.micro_compact_threshold", 2000)
 	v.SetDefault("chat_memory.compression.token_threshold", 6000)
 	v.SetDefault("chat_memory.compression.recent_rounds", 5)
 	v.SetDefault("chat_memory.compression.recent_token_limit", 2000)
