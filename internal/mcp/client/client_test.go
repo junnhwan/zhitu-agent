@@ -8,7 +8,7 @@ import (
 )
 
 func TestNewClientDisabled(t *testing.T) {
-	c := NewClient(context.Background(), config.MCPClientConfig{Enabled: false})
+	c := NewClient(context.Background(), config.MCPClientConfig{Enabled: false}, Hooks{})
 	if c == nil {
 		t.Fatal("nil client")
 	}
@@ -28,7 +28,7 @@ func TestNewClientSkipsBadServer(t *testing.T) {
 			{Name: "no-name", Transport: "sse", URL: "http://127.0.0.1:1", Enabled: false}, // disabled
 		},
 	}
-	c := NewClient(context.Background(), cfg)
+	c := NewClient(context.Background(), cfg, Hooks{})
 	if len(c.Tools()) != 0 {
 		t.Errorf("expected no tools, got %d", len(c.Tools()))
 	}

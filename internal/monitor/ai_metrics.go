@@ -20,6 +20,9 @@ type AiMetrics struct {
 	ragZeroHit          *prometheus.CounterVec
 	ragRerankFallback   prometheus.Counter
 	ragRetrieveDuration *prometheus.HistogramVec
+	mcpToolsGauge       *prometheus.GaugeVec
+	mcpCalls            *prometheus.CounterVec
+	mcpCallDuration     *prometheus.HistogramVec
 
 	counterCache map[string]prometheus.Counter
 	timerCache   map[string]prometheus.Observer
@@ -81,7 +84,31 @@ func NewAiMetrics(registry *prometheus.Registry) *AiMetrics {
 	}, []string{"mode"})
 	registry.MustRegister(m.ragChannelFailed, m.ragZeroHit, m.ragRerankFallback, m.ragRetrieveDuration)
 
+	m.mcpToolsGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "mcp_client_tools_total",
+		Help: "MCP 客户端注册的工具数（按 server 分组）",
+	}, []string{"server"})
+	m.mcpCalls = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "mcp_client_calls_total",
+		Help: "MCP 工具调用次数（status=success|error）",
+	}, []string{"server", "tool", "status"})
+	m.mcpCallDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "mcp_client_call_duration_seconds",
+		Help:    "MCP 工具调用端到端耗时",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"server", "tool"})
+	registry.MustRegister(m.mcpToolsGauge, m.mcpCalls, m.mcpCallDuration)
+
 	return m
+}
+
+func (m *AiMetrics) SetMCPToolsCount(server string, n int) {
+	m.mcpToolsGauge.WithLabelValues(server).Set(float64(n))
+}
+
+func (m *AiMetrics) RecordMCPCall(server, toolName, status string, d time.Duration) {
+	m.mcpCalls.WithLabelValues(server, toolName, status).Inc()
+	m.mcpCallDuration.WithLabelValues(server, toolName).Observe(d.Seconds())
 }
 
 func (m *AiMetrics) RecordRAGChannelFailed(name string) {

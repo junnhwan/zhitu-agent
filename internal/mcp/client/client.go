@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/cloudwego/eino-ext/components/tool/mcp"
 	"github.com/cloudwego/eino/components/tool"
@@ -13,6 +14,12 @@ import (
 
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
 )
+
+// Hooks 让调用方注入可观测回调（通常传 monitor.AiMetrics 的方法）。
+type Hooks struct {
+	OnRegistered func(server string, toolCount int)
+	OnCall       func(server, tool, status string, duration time.Duration)
+}
 
 // Client 聚合多个 MCP server 的工具，暴露给 chat service。
 // 未启用时 NewClient 返回 no-op 实例（Tools/ToolInfos/ToolMap 全返空）。
@@ -30,7 +37,7 @@ type invokable interface {
 
 // NewClient 按 config 初始化所有 enabled server，工具名冲突时第二次出现自动加 "{serverName}__" 前缀。
 // 任何单 server 初始化失败只 log warn，不阻断；返回的 *Client 永远非 nil。
-func NewClient(ctx context.Context, cfg config.MCPClientConfig) *Client {
+func NewClient(ctx context.Context, cfg config.MCPClientConfig, hooks Hooks) *Client {
 	c := &Client{cfg: cfg, servers: map[string]*mcpclient.Client{}}
 	if !cfg.Enabled {
 		return c
@@ -63,15 +70,22 @@ func NewClient(ctx context.Context, cfg config.MCPClientConfig) *Client {
 				continue
 			}
 			name := info.Name
+			var final invokable = it
 			if _, clash := seen[name]; clash {
 				name = sc.Name + "__" + name
-				it = &renamed{invokable: it, name: name, desc: info.Desc, params: info.ParamsOneOf}
+				final = &renamed{invokable: it, name: name, desc: info.Desc, params: info.ParamsOneOf}
 			}
 			seen[name] = struct{}{}
-			c.tools = append(c.tools, it)
+			if hooks.OnCall != nil {
+				final = &metered{invokable: final, server: sc.Name, tool: name, onCall: hooks.OnCall}
+			}
+			c.tools = append(c.tools, final)
 			added++
 		}
 		log.Printf("[mcp.client] registered %d tools from server %q", added, sc.Name)
+		if hooks.OnRegistered != nil {
+			hooks.OnRegistered(sc.Name, added)
+		}
 	}
 	return c
 }
@@ -139,4 +153,23 @@ type renamed struct {
 
 func (r *renamed) Info(ctx context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{Name: r.name, Desc: r.desc, ParamsOneOf: r.params}, nil
+}
+
+// metered 在 InvokableRun 前后计时并回调 OnCall。
+type metered struct {
+	invokable
+	server string
+	tool   string
+	onCall func(server, tool, status string, duration time.Duration)
+}
+
+func (m *metered) InvokableRun(ctx context.Context, argsJSON string, opts ...tool.Option) (string, error) {
+	start := time.Now()
+	out, err := m.invokable.InvokableRun(ctx, argsJSON, opts...)
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+	m.onCall(m.server, m.tool, status, time.Since(start))
+	return out, err
 }

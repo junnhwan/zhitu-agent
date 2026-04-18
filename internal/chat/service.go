@@ -102,7 +102,10 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {	ctx := conte
 	if err != nil {
 		return nil, fmt.Errorf("failed to create tools: %w", err)
 	}
-	mcpClient := mcpclient.NewClient(ctx, cfg.MCP.Client)
+	mcpClient := mcpclient.NewClient(ctx, cfg.MCP.Client, mcpclient.Hooks{
+		OnRegistered: monitor.DefaultRegistry.AiMetrics.SetMCPToolsCount,
+		OnCall:       monitor.DefaultRegistry.AiMetrics.RecordMCPCall,
+	})
 	mcpInfos, err := mcpClient.ToolInfos(ctx)
 	if err != nil {
 		log.Printf("[ChatService] mcp tool infos failed: %v", err)
