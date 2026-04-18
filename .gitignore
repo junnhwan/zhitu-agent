@@ -1,4 +1,9 @@
 .claude
-go.mod
-go.sum
 .env
+
+# Go build output
+*.exe
+
+# Session conversation dumps
+2026-*-ZhituAgent-*.txt
+2026-*-*.txt
