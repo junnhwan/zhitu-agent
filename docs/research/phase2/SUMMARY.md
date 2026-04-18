@@ -182,5 +182,5 @@
 ## Wave 1 进度
 
 - ✅ **P3 记忆压缩升级** (PR 1) — LLM 摘要 + Micro Compact + CJK/ASCII token 估算，策略可配置可降级
-- ⬜ **P2 Query Rewrite + 三级意图分类** (PR 2)
+- ✅ **P2 Query Rewrite + 三级意图分类** (PR 2) — `internal/understand/` 新包：Rewriter + Classifier(JSON 容错) + Guardian(置信度兜底) + Service(gobreaker 熔断)，接入 SimpleOrchestrator，关键词路由作 fallback；离线评估集 seed 20 条 + `-tags=eval` 框架
 - ⬜ **P4 Eino Graph + ReAct Agent 重构** (PR 3)

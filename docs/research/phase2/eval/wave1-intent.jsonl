@@ -1,0 +1,20 @@
+{"query":"什么是 RAG","expected_domain":"KNOWLEDGE","expected_category":"RAG_QUERY"}
+{"query":"介绍一下向量数据库","expected_domain":"KNOWLEDGE","expected_category":"RAG_QUERY"}
+{"query":"解释一下 transformer 架构","expected_domain":"KNOWLEDGE","expected_category":"RAG_QUERY"}
+{"query":"docker 是什么","expected_domain":"KNOWLEDGE","expected_category":"RAG_QUERY"}
+{"query":"Go 中的 channel 怎么用","expected_domain":"KNOWLEDGE","expected_category":"CODE_QUERY"}
+{"query":"给我看下 binary search 的实现","expected_domain":"KNOWLEDGE","expected_category":"CODE_QUERY"}
+{"query":"帮我发邮件给张三说会议改到明天","expected_domain":"TOOL","expected_category":"EMAIL"}
+{"query":"send email to alice about the report","expected_domain":"TOOL","expected_category":"EMAIL"}
+{"query":"现在几点了","expected_domain":"TOOL","expected_category":"TIME"}
+{"query":"今天日期","expected_domain":"TOOL","expected_category":"TIME"}
+{"query":"你好","expected_domain":"CHITCHAT","expected_category":""}
+{"query":"哈哈这个有意思","expected_domain":"CHITCHAT","expected_category":""}
+{"query":"我累了","expected_domain":"CHITCHAT","expected_category":""}
+{"query":"thanks","expected_domain":"CHITCHAT","expected_category":""}
+{"query":"它有哪些变种","expected_domain":"KNOWLEDGE","expected_category":"RAG_QUERY"}
+{"query":"再讲讲第二点","expected_domain":"KNOWLEDGE","expected_category":"RAG_QUERY"}
+{"query":"那个 RAG 跟向量库什么关系","expected_domain":"KNOWLEDGE","expected_category":"RAG_QUERY"}
+{"query":"刚才的代码再帮我优化下","expected_domain":"KNOWLEDGE","expected_category":"CODE_QUERY"}
+{"query":"查询订单","expected_domain":"TOOL","expected_category":"EMAIL"}
+{"query":"了解客户最新动态","expected_domain":"CHITCHAT","expected_category":""}
