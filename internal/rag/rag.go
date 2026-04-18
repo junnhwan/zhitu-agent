@@ -11,7 +11,7 @@ import (
 type RAG struct {
 	Store              *Store
 	Indexer            *Indexer
-	Retriever          *ReRankingRetriever
+	Retriever          Retriever
 	RerankClient       *QwenRerankClient
 	QueryPreprocessor  *QueryPreprocessor
 	DataLoader         *DataLoader

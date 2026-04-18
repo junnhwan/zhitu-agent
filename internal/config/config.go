@@ -43,10 +43,18 @@ type DashScopeConfig struct {
 }
 
 type RAGConfig struct {
-	DocsPath      string              `mapstructure:"docs_path"`
-	RetrieveTopK  int                 `mapstructure:"retrieve_top_k"`
-	BaseRetriever RAGBaseRetrieverConfig `mapstructure:"base_retriever"`
-	Rerank        RAGRerankConfig     `mapstructure:"rerank"`
+	DocsPath         string                 `mapstructure:"docs_path"`
+	RetrieveTopK     int                    `mapstructure:"retrieve_top_k"`
+	BaseRetriever    RAGBaseRetrieverConfig `mapstructure:"base_retriever"`
+	Rerank           RAGRerankConfig        `mapstructure:"rerank"`
+	PipelineMode     string                 `mapstructure:"pipeline_mode"`
+	ChannelTimeoutMs int                    `mapstructure:"channel_timeout_ms"`
+	RRF              RAGRRFConfig           `mapstructure:"rrf"`
+}
+
+type RAGRRFConfig struct {
+	K                int     `mapstructure:"k"`
+	ConsistencyBonus float64 `mapstructure:"consistency_bonus"`
 }
 
 type RAGBaseRetrieverConfig struct {
@@ -184,6 +192,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rag.base_retriever.max_results", 30)
 	v.SetDefault("rag.base_retriever.min_score", 0.55)
 	v.SetDefault("rag.rerank.final_top_n", 5)
+	v.SetDefault("rag.pipeline_mode", "legacy")
+	v.SetDefault("rag.channel_timeout_ms", 2000)
+	v.SetDefault("rag.rrf.k", 60)
+	v.SetDefault("rag.rrf.consistency_bonus", 1.3)
 
 	// Mail
 	v.SetDefault("mail.host", "smtp.qq.com")
