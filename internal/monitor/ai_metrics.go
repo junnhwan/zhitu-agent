@@ -15,6 +15,7 @@ type AiMetrics struct {
 	errorCounter   *prometheus.CounterVec
 	tokenCounter   *prometheus.CounterVec
 	responseTimer  *prometheus.HistogramVec
+	workflowModeCounter *prometheus.CounterVec
 
 	counterCache map[string]prometheus.Counter
 	timerCache   map[string]prometheus.Observer
@@ -50,7 +51,12 @@ func NewAiMetrics(registry *prometheus.Registry) *AiMetrics {
 		Buckets: prometheus.DefBuckets,
 	}, []string{"user_id", "session_id", "model_name"})
 
-	registry.MustRegister(m.requestCounter, m.errorCounter, m.tokenCounter, m.responseTimer)
+	m.workflowModeCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "ai_workflow_requests_total",
+		Help: "对话链路选择分布（legacy vs graph）",
+	}, []string{"mode", "entry"})
+
+	registry.MustRegister(m.requestCounter, m.errorCounter, m.tokenCounter, m.responseTimer, m.workflowModeCounter)
 	return m
 }
 
@@ -78,4 +84,13 @@ func (m *AiMetrics) RecordTokenUsage(userID, sessionID, modelName, tokenType str
 // RecordResponseTime records the response duration.
 func (m *AiMetrics) RecordResponseTime(userID, sessionID, modelName string, duration time.Duration) {
 	m.responseTimer.WithLabelValues(userID, sessionID, modelName).Observe(duration.Seconds())
+}
+
+// RecordWorkflowMode increments the counter tracking legacy vs graph chat chain usage.
+// entry is the caller — "chat" or "stream_chat".
+func (m *AiMetrics) RecordWorkflowMode(mode, entry string) {
+	if mode == "" {
+		mode = "legacy"
+	}
+	m.workflowModeCounter.WithLabelValues(mode, entry).Inc()
 }

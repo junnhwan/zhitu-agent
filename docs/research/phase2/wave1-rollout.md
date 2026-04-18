@@ -30,13 +30,11 @@
 - `memory_compress_duration_seconds{strategy}` — P3 压缩耗时
 - `understand_intent_classify_total{domain, correct}` — P2 分类准确率（需 eval 集跑）
 - `circuit_breaker_state{name="understand"}` — P2 熔断器状态
-- `chat_workflow_mode{mode}` — P4 legacy vs graph 请求量分布（需新增埋点）
-- `react_agent_step_count` — ReAct 步数分布（需新增埋点）
-
-**埋点 TODO**：`chat_workflow_mode` 和 `react_agent_step_count` 两个新指标尚未实现，在 Wave 1 收尾合并前补。
+- `ai_workflow_requests_total{mode, entry}` — ✅ P4 legacy vs graph 请求量（entry=chat/stream_chat）
+- `react_agent_step_count` — ReAct 步数分布（TODO：需挂 Eino compose callback，留到 Wave 2）
 
 ## 已知限制 / Wave 2 衔接
 
 - Graph 当前是**纯串行**（enrich → retrieve → build_prompt → react → wrap）。Plan 原设计的 `[rewrite | classify | rag]` 三路并行因为 Eino 合并语义复杂，留到 Wave 2 演进
-- StreamChat 还没走 graph（`workflow.ChatWorkflow.Invoke` only）。Wave 2 起做流式版本
-- Memory 写入仍在 `chatViaWorkflow` 里手工调用，不在 Graph 内。这样保留 P3 的压缩/micro-compact 逻辑完全可用，但如果 Wave 2 要加 state graph / 回调追踪，需要把 memory 搬进 graph
+- StreamChat 的 graph 版本绕过 compile 后的 Runnable，直接串行跑 enrich→retrieve→build→`agent.Stream`。原因：用 Graph.Stream 会让 wrapResponse Lambda 折叠流；手写串行更直接
+- Memory 写入仍在 `chatViaWorkflow` / `streamChatViaWorkflow` 里手工调用，不在 Graph 内。这样保留 P3 的压缩/micro-compact 逻辑完全可用，但如果 Wave 2 要加 state graph / 回调追踪，需要把 memory 搬进 graph

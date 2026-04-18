@@ -6,6 +6,7 @@ import (
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/flow/agent/react"
+	"github.com/cloudwego/eino/schema"
 )
 
 const (
@@ -18,6 +19,8 @@ const (
 
 type ChatWorkflow struct {
 	runnable compose.Runnable[*Request, *Response]
+	agent    *react.Agent
+	deps     *Deps
 }
 
 func NewChatWorkflow(ctx context.Context, deps *Deps) (*ChatWorkflow, error) {
@@ -77,9 +80,30 @@ func NewChatWorkflow(ctx context.Context, deps *Deps) (*ChatWorkflow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("workflow: compile: %w", err)
 	}
-	return &ChatWorkflow{runnable: r}, nil
+	return &ChatWorkflow{runnable: r, agent: agent, deps: deps}, nil
 }
 
 func (w *ChatWorkflow) Invoke(ctx context.Context, req *Request) (*Response, error) {
 	return w.runnable.Invoke(ctx, req)
+}
+
+// Stream runs enrich/retrieve/buildPrompt manually (cheap pure Go steps),
+// then delegates to ReAct's Stream to get token-by-token output.
+// Falls back from the compiled graph here because wrapping the ReAct stream
+// through an additional Lambda node would collect the stream and defeat the
+// point of streaming.
+func (w *ChatWorkflow) Stream(ctx context.Context, req *Request) (*schema.StreamReader[*schema.Message], error) {
+	e, err := enrichFn(w.deps)(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("workflow.stream enrich: %w", err)
+	}
+	e, err = retrieveFn(w.deps)(ctx, e)
+	if err != nil {
+		return nil, fmt.Errorf("workflow.stream retrieve: %w", err)
+	}
+	msgs, err := buildPromptFn(w.deps)(ctx, e)
+	if err != nil {
+		return nil, fmt.Errorf("workflow.stream build_prompt: %w", err)
+	}
+	return w.agent.Stream(ctx, msgs)
 }

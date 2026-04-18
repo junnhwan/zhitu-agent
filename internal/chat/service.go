@@ -245,8 +245,10 @@ func (s *Service) Chat(ctx context.Context, sessionID int64, prompt string) (str
 	s.monitor.Logger.LogRequest("AI_CHAT", "model", s.modelName, "session", sessionIDStr)
 
 	if s.workflow != nil && s.workflowMode == "graph" {
+		s.monitor.AiMetrics.RecordWorkflowMode("graph", "chat")
 		return s.chatViaWorkflow(ctx, sessionID, prompt)
 	}
+	s.monitor.AiMetrics.RecordWorkflowMode("legacy", "chat")
 
 	mem := s.getMemory(sessionID)
 	messages := s.buildMessages(ctx, mem, prompt)
@@ -322,6 +324,12 @@ func (s *Service) StreamChat(ctx context.Context, sessionID int64, prompt string
 	// Record request start
 	s.monitor.AiMetrics.RecordRequest(userIDStr, sessionIDStr, s.modelName, "started")
 	s.monitor.Logger.LogRequest("AI_STREAM_CHAT", "model", s.modelName, "session", sessionIDStr)
+
+	if s.workflow != nil && s.workflowMode == "graph" {
+		s.monitor.AiMetrics.RecordWorkflowMode("graph", "stream_chat")
+		return s.streamChatViaWorkflow(ctx, sessionID, prompt, onChunk)
+	}
+	s.monitor.AiMetrics.RecordWorkflowMode("legacy", "stream_chat")
 
 	mem := s.getMemory(sessionID)
 	messages := s.buildMessages(ctx, mem, prompt)
@@ -594,4 +602,47 @@ func (s *Service) chatViaWorkflow(ctx context.Context, sessionID int64, prompt s
 		mem.Add(ctx, resp.Message)
 	}
 	return resp.Message.Content, nil
+}
+
+// streamChatViaWorkflow pipes the graph's streaming output to onChunk and
+// persists the concatenated message to memory at the end.
+func (s *Service) streamChatViaWorkflow(ctx context.Context, sessionID int64, prompt string, onChunk func(content string)) error {
+	mem := s.getMemory(sessionID)
+	var history []*schema.Message
+	if mem != nil {
+		history = mem.GetMessages(ctx)
+	}
+
+	stream, err := s.workflow.Stream(ctx, &workflow.Request{
+		SessionID: sessionID,
+		Prompt:    prompt,
+		History:   history,
+	})
+	if err != nil {
+		return fmt.Errorf("workflow stream: %w", err)
+	}
+
+	var accumulated []*schema.Message
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("stream read: %w", err)
+		}
+		accumulated = append(accumulated, chunk)
+		if chunk.Content != "" {
+			onChunk(chunk.Content)
+		}
+	}
+
+	if mem != nil && len(accumulated) > 0 {
+		final, err := schema.ConcatMessages(accumulated)
+		if err == nil && final != nil {
+			mem.Add(ctx, schema.UserMessage(prompt))
+			mem.Add(ctx, final)
+		}
+	}
+	return nil
 }

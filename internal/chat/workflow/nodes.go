@@ -9,12 +9,9 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// enrichNode runs rewrite + classify in one step to keep the graph serial.
-// Produces *enriched with Query/Intent populated; RAGDocs/Messages left for later nodes.
-func enrichNode(deps *Deps) *compose.Lambda {
-	return compose.InvokableLambda(func(ctx context.Context, req *Request) (*enriched, error) {
+func enrichFn(deps *Deps) func(context.Context, *Request) (*enriched, error) {
+	return func(ctx context.Context, req *Request) (*enriched, error) {
 		e := &enriched{Request: req, Query: req.Prompt}
-
 		if deps.IntentRouter == nil {
 			return e, nil
 		}
@@ -28,12 +25,11 @@ func enrichNode(deps *Deps) *compose.Lambda {
 		}
 		e.Intent = res.Intent
 		return e, nil
-	})
+	}
 }
 
-// retrieveNode does RAG retrieval only when intent is KNOWLEDGE.
-func retrieveNode(deps *Deps) *compose.Lambda {
-	return compose.InvokableLambda(func(ctx context.Context, e *enriched) (*enriched, error) {
+func retrieveFn(deps *Deps) func(context.Context, *enriched) (*enriched, error) {
+	return func(ctx context.Context, e *enriched) (*enriched, error) {
 		if deps.RAG == nil || e.Intent == nil || e.Intent.Domain != "KNOWLEDGE" {
 			return e, nil
 		}
@@ -44,15 +40,12 @@ func retrieveNode(deps *Deps) *compose.Lambda {
 		}
 		e.RAGDocs = docs
 		return e, nil
-	})
+	}
 }
 
-// buildPromptNode assembles system + history + rag context + user query into
-// a []*schema.Message ready for the ReAct agent.
-func buildPromptNode(deps *Deps) *compose.Lambda {
-	return compose.InvokableLambda(func(ctx context.Context, e *enriched) ([]*schema.Message, error) {
+func buildPromptFn(deps *Deps) func(context.Context, *enriched) ([]*schema.Message, error) {
+	return func(ctx context.Context, e *enriched) ([]*schema.Message, error) {
 		msgs := make([]*schema.Message, 0, len(e.Request.History)+3)
-
 		if deps.SystemPrompt != "" {
 			msgs = append(msgs, schema.SystemMessage(deps.SystemPrompt))
 		}
@@ -72,16 +65,19 @@ func buildPromptNode(deps *Deps) *compose.Lambda {
 			b.WriteString(e.Query)
 			userContent = b.String()
 		}
-
 		msgs = append(msgs, schema.UserMessage(userContent))
 		e.Messages = msgs
 		return msgs, nil
-	})
+	}
 }
 
-// wrapResponse converts the ReAct agent's *schema.Message output into *Response.
-func wrapResponseNode() *compose.Lambda {
-	return compose.InvokableLambda(func(ctx context.Context, msg *schema.Message) (*Response, error) {
+func wrapResponseFn() func(context.Context, *schema.Message) (*Response, error) {
+	return func(ctx context.Context, msg *schema.Message) (*Response, error) {
 		return &Response{Message: msg}, nil
-	})
+	}
 }
+
+func enrichNode(deps *Deps) *compose.Lambda      { return compose.InvokableLambda(enrichFn(deps)) }
+func retrieveNode(deps *Deps) *compose.Lambda    { return compose.InvokableLambda(retrieveFn(deps)) }
+func buildPromptNode(deps *Deps) *compose.Lambda { return compose.InvokableLambda(buildPromptFn(deps)) }
+func wrapResponseNode() *compose.Lambda          { return compose.InvokableLambda(wrapResponseFn()) }
