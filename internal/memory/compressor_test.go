@@ -28,8 +28,8 @@ func TestNewCompressorUnknown(t *testing.T) {
 	}
 }
 
-func TestNewCompressorLLMSummaryNotWiredYet(t *testing.T) {
+func TestNewCompressorLLMSummaryNeedsLLMOrCreds(t *testing.T) {
 	if _, err := NewCompressor(Config{Strategy: "llm_summary"}); err == nil {
-		t.Errorf("expected error until Task 3 wires llm_summary")
+		t.Errorf("expected error when neither LLM nor creds are provided")
 	}
 }
