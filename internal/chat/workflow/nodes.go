@@ -7,6 +7,8 @@ import (
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
+
+	"github.com/zhitu-agent/zhitu-agent/internal/rag/channel"
 )
 
 func enrichFn(deps *Deps) func(context.Context, *Request) (*enriched, error) {
@@ -33,7 +35,8 @@ func retrieveFn(deps *Deps) func(context.Context, *enriched) (*enriched, error) 
 		if deps.RAG == nil || e.Intent == nil || e.Intent.Domain != "KNOWLEDGE" {
 			return e, nil
 		}
-		docs, err := deps.RAG.Retriever.Retrieve(ctx, e.Query)
+		rctx := channel.WithDomain(ctx, e.Intent.Domain)
+		docs, err := deps.RAG.Retriever.Retrieve(rctx, e.Query)
 		if err != nil {
 			log.Printf("[workflow.retrieve] rag failed, skip: %v", err)
 			return e, nil

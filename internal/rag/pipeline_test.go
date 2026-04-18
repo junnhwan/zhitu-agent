@@ -125,3 +125,39 @@ func TestPipelineAllEmpty(t *testing.T) {
 		t.Errorf("zeroHit = %q", zeroHit)
 	}
 }
+
+func TestPipelinePhraseFallback(t *testing.T) {
+	empty := &stubChannel{name: "empty"}
+	phrase := &stubChannel{name: "phrase", cands: []*channel.Candidate{mkCandWithID("p1", "phrase", 1, "hit")}}
+	legacy := &stubLegacy{docs: []*schema.Document{{ID: "legacy1"}}}
+	zeroHit := ""
+	p := NewPipeline(nil, []channel.Channel{empty},
+		[]postprocessor.Processor{postprocessor.NewDedup()},
+		time.Second, legacy, 5,
+		PipelineHooks{OnZeroHit: func(fb string) { zeroHit = fb }}).
+		WithPhraseFallback(phrase)
+	out, _ := p.Retrieve(context.Background(), "q")
+	if zeroHit != "phrase" {
+		t.Errorf("zeroHit = %q", zeroHit)
+	}
+	if len(out) != 1 || out[0].ID != "p1" {
+		t.Errorf("expected phrase hit, got %+v", out)
+	}
+}
+
+func TestPipelinePhraseEmptyFallsToLegacy(t *testing.T) {
+	empty := &stubChannel{name: "empty"}
+	phrase := &stubChannel{name: "phrase"} // also empty
+	legacy := &stubLegacy{docs: []*schema.Document{{ID: "legacy1"}}}
+	zeroHit := ""
+	p := NewPipeline(nil, []channel.Channel{empty}, nil, time.Second, legacy, 5,
+		PipelineHooks{OnZeroHit: func(fb string) { zeroHit = fb }}).
+		WithPhraseFallback(phrase)
+	out, _ := p.Retrieve(context.Background(), "q")
+	if zeroHit != "legacy" {
+		t.Errorf("zeroHit = %q", zeroHit)
+	}
+	if len(out) != 1 || out[0].ID != "legacy1" {
+		t.Errorf("expected legacy hit, got %+v", out)
+	}
+}

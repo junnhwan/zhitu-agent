@@ -23,6 +23,7 @@ type Pipeline struct {
 	channels       []channel.Channel
 	processors     []postprocessor.Processor
 	channelTimeout time.Duration
+	phraseFallback channel.Channel
 	legacyFallback Retriever
 	finalTopN      int
 	hooks          PipelineHooks
@@ -52,6 +53,13 @@ func NewPipeline(
 		finalTopN:      finalTopN,
 		hooks:          hooks,
 	}
+}
+
+// WithPhraseFallback 注入零命中第二级兜底（phrase 精确短语）。
+// 三级兜底顺序：channels → phrase → legacy。
+func (p *Pipeline) WithPhraseFallback(ch channel.Channel) *Pipeline {
+	p.phraseFallback = ch
+	return p
 }
 
 var _ Retriever = (*Pipeline)(nil)
@@ -90,6 +98,24 @@ func (p *Pipeline) Retrieve(ctx context.Context, query string) ([]*schema.Docume
 	_ = g.Wait()
 
 	all := flattenCandidates(results)
+
+	if len(all) == 0 && p.phraseFallback != nil {
+		log.Printf("[Pipeline] all channels empty, trying phrase fallback")
+		cctx, cancel := context.WithTimeout(ctx, p.channelTimeout)
+		phraseCands, err := p.phraseFallback.Retrieve(cctx, q)
+		cancel()
+		if err != nil {
+			log.Printf("[Pipeline] phrase fallback failed: %v", err)
+			if p.hooks.OnChannelFailed != nil {
+				p.hooks.OnChannelFailed(p.phraseFallback.Name())
+			}
+		} else if len(phraseCands) > 0 {
+			if p.hooks.OnZeroHit != nil {
+				p.hooks.OnZeroHit("phrase")
+			}
+			all = phraseCands
+		}
+	}
 
 	if len(all) == 0 {
 		if p.legacyFallback != nil {
