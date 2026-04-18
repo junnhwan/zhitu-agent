@@ -184,3 +184,4 @@
 - ✅ **P3 记忆压缩升级** (PR 1) — LLM 摘要 + Micro Compact + CJK/ASCII token 估算，策略可配置可降级
 - ✅ **P2 Query Rewrite + 三级意图分类** (PR 2) — `internal/understand/` 新包：Rewriter + Classifier(JSON 容错) + Guardian(置信度兜底) + Service(gobreaker 熔断)，接入 SimpleOrchestrator，关键词路由作 fallback；离线评估集 seed 20 条 + `-tags=eval` 框架
 - ✅ **P4 Eino Graph + ReAct Agent 重构** (PR 3) — `internal/chat/workflow/` 新包：Graph 串行编排 (enrich→retrieve→build_prompt→react→wrap) + ReAct Agent 通过 `ExportGraph` 嵌入；`chat.workflow_mode: legacy|graph` 灰度开关，默认 legacy；手写 tool-loop 保留为 safety net
+- ✅ **P1 PR-A 多通道检索骨架** (Wave 2) — `internal/rag/channel/` + `internal/rag/postprocessor/` + `rag.Pipeline`：Vector/BM25 双通道并行 (errgroup + 2s 超时) + Dedup/RRF/Rerank 处理器链 + 零命中回退 legacy；`rag.pipeline_mode: legacy|hybrid` 灰度开关，默认 legacy；30 条 seed golden set + `-tags=eval` A/B 框架
