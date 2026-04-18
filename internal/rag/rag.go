@@ -103,8 +103,8 @@ func buildHybridPipeline(
 	procs := []postprocessor.Processor{
 		postprocessor.NewDedup(),
 		postprocessor.NewRRF(cfg.RAG.RRF.K, cfg.RAG.RRF.ConsistencyBonus),
-		postprocessor.NewDiversity(cfg.RAG.Diversity.PerFileCap),
 		postprocessor.NewRerank(rerankClient, cfg.RAG.Rerank.FinalTopN, rerankFallback),
+		postprocessor.NewDiversity(cfg.RAG.Diversity.PerFileCap),
 	}
 
 	timeout := time.Duration(cfg.RAG.ChannelTimeoutMs) * time.Millisecond

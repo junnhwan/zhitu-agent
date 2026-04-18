@@ -186,8 +186,8 @@ func TestRagAB(t *testing.T) {
 	procs := []postprocessor.Processor{
 		postprocessor.NewDedup(),
 		postprocessor.NewRRF(cfg.RAG.RRF.K, cfg.RAG.RRF.ConsistencyBonus),
-		postprocessor.NewDiversity(cfg.RAG.Diversity.PerFileCap),
 		postprocessor.NewRerank(rerankClient, cfg.RAG.Rerank.FinalTopN, metrics.RecordRAGRerankFallback),
+		postprocessor.NewDiversity(cfg.RAG.Diversity.PerFileCap),
 	}
 	hybrid := NewPipeline(pre, channels, procs,
 		time.Duration(cfg.RAG.ChannelTimeoutMs)*time.Millisecond,

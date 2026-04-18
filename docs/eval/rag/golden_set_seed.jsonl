@@ -80,3 +80,41 @@
 {"query":"finalTopN 5 默认","relevant_keywords":["finalTopN"]}
 {"query":"BaseRetriever min_score 0.55","relevant_keywords":["min_score"]}
 {"query":"Auto reload 5 分钟扫描","relevant_keywords":["AutoReloader"]}
+{"query":"compose.NewGraph 怎么定义","relevant_keywords":["compose.NewGraph"]}
+{"query":"InvokableLambda 节点","relevant_keywords":["InvokableLambda"]}
+{"query":"ExportGraph 嵌入用法","relevant_keywords":["ExportGraph"]}
+{"query":"WithTools 返回新 model","relevant_keywords":["WithTools"]}
+{"query":"BindTools race condition","relevant_keywords":["BindTools","race"]}
+{"query":"ToolCallingChatModel 接口","relevant_keywords":["ToolCallingChatModel"]}
+{"query":"react.NewAgent AgentConfig","relevant_keywords":["react.NewAgent"]}
+{"query":"defaultDocumentToFields 默认实现","relevant_keywords":["defaultDocumentToFields"]}
+{"query":"FT.CREATE schema 字段","relevant_keywords":["FT.CREATE"]}
+{"query":"FT.DROPINDEX 命令","relevant_keywords":["FT.DROPINDEX"]}
+{"query":"HSET 写入 hash 字段","relevant_keywords":["HSET"]}
+{"query":"FT.INFO 检查 attribute","relevant_keywords":["FT.INFO"]}
+{"query":"HNSW vs FLAT 索引","relevant_keywords":["HNSW","FLAT"]}
+{"query":"COSINE 距离 metric","relevant_keywords":["COSINE"]}
+{"query":"FLOAT32 DIM 1024","relevant_keywords":["FLOAT32","1024"]}
+{"query":"DIALECT 2 查询语法","relevant_keywords":["DIALECT"]}
+{"query":"WITHSCORES 返回打分","relevant_keywords":["WITHSCORES"]}
+{"query":"gobreaker.NewCircuitBreaker 配置","relevant_keywords":["gobreaker"]}
+{"query":"ReadyToTrip 回调 5 分钟","relevant_keywords":["ReadyToTrip"]}
+{"query":"errgroup.WithContext 并发","relevant_keywords":["errgroup"]}
+{"query":"go-ego/gse v1.0.2 字典","relevant_keywords":["gse"]}
+{"query":"gojieba CGO 依赖","relevant_keywords":["gojieba"]}
+{"query":"Eino 0.8.9 版本","relevant_keywords":["0.8.9"]}
+{"query":"qwen-turbo 摘要 token","relevant_keywords":["qwen-turbo"]}
+{"query":"text-embedding-v3 1024 维度","relevant_keywords":["text-embedding-v3"]}
+{"query":"qwen3-rerank API 调用","relevant_keywords":["qwen3-rerank"]}
+{"query":"RecursiveDocumentSplitter 800 200","relevant_keywords":["RecursiveDocumentSplitter"]}
+{"query":"chunkOverlap 200 chars","relevant_keywords":["chunkOverlap","200"]}
+{"query":"maxChunkSize 800","relevant_keywords":["maxChunkSize","800"]}
+{"query":"chat_memory.compression.strategy 配置","relevant_keywords":["chat_memory","strategy"]}
+{"query":"workflow_mode legacy graph","relevant_keywords":["workflow_mode"]}
+{"query":"pipeline_mode hybrid 切换","relevant_keywords":["pipeline_mode"]}
+{"query":"channel_timeout_ms 2000 ms","relevant_keywords":["channel_timeout_ms"]}
+{"query":"min_score 0.55 过滤","relevant_keywords":["min_score","0.55"]}
+{"query":"tree.yaml 加载","relevant_keywords":["tree.yaml"]}
+{"query":"interview-prep-wave1 七段式","relevant_keywords":["interview-prep-wave1"]}
+{"query":"opspilot Plan-Execute","relevant_keywords":["OpsPilot","Plan-Execute"]}
+{"query":"paismart-go ES KNN","relevant_keywords":["paismart-go","KNN"]}

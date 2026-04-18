@@ -195,3 +195,8 @@
   - **2026-04-18 干净重建索引**（82 条 golden）：legacy Recall@5=0.817 MRR=0.753；hybrid Recall@5=0.793 MRR=0.736
   - hybrid ≈ legacy（差距在 2% 采样噪声内），BM25 plumbing 验证通过；真实收益要等 golden set 补充更多 BM25 擅长的 query（错误码 / API 精确匹配 / 数字 ID）才能拉开差距
   - 切 hybrid 启动时 FT.INFO 检测 `content_tokenized` 字段缺失会自动 DROPINDEX+CREATE（不删 HASH，DataLoader 会重新 HSET 回写）
+- ✅ **P1 PR-B 调优 — golden 扩到 120 + diversity 顺序** (Wave 2，2026-04-18)
+  - 补 38 条 BM25-友好样本（API 名 / FT.SEARCH 命令 / 配置项 / 库版本号），golden set 共 120 条
+  - **顺序调整**：DiversityProcessor 从 RRF 后挪到 Rerank 后 — 之前 diversity cap 2 在 rerank 前会丢同源相关 chunk，rerank 候选池被压缩
+  - **120 条 baseline**：legacy Recall@5=0.758 MRR=0.702；hybrid Recall@5=0.750 MRR=**0.705 (反超 legacy)**
+  - 结论：hybrid ≈ legacy（Recall 差 0.8% ~ 1 样本采样噪声），MRR 已反超 0.3%。完整骨架打通且不退化，进一步收益要靠 RRF 超参 sweep / 更大 golden / 更细 query 类型分桶
