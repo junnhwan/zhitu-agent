@@ -1,0 +1,21 @@
+{
+  "golden_count": 120,
+  "golden_source": "docs/eval/rag/golden_set_seed.jsonl",
+  "scores": [
+    {
+      "label": "legacy",
+      "samples": 120,
+      "hits": 91,
+      "recall_at_5": 0.7583333333333333,
+      "mrr": 0.7020833333333333
+    },
+    {
+      "label": "hybrid",
+      "samples": 120,
+      "hits": 90,
+      "recall_at_5": 0.75,
+      "mrr": 0.7058333333333333
+    }
+  ],
+  "timestamp": "2026-04-18T19:04:39+08:00"
+}

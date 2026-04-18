@@ -73,7 +73,15 @@ func sampleHit(docs []string, keywords []string) bool {
 	return true
 }
 
-func runEval(t *testing.T, label string, ret Retriever, samples []goldenSample, topK int) {
+type evalScore struct {
+	Label     string  `json:"label"`
+	Samples   int     `json:"samples"`
+	Hits      int     `json:"hits"`
+	RecallAt5 float64 `json:"recall_at_5"`
+	MRR       float64 `json:"mrr"`
+}
+
+func runEval(t *testing.T, label string, ret Retriever, samples []goldenSample, topK int) evalScore {
 	hit := 0
 	mrrSum := 0.0
 	for _, s := range samples {
@@ -104,6 +112,7 @@ func runEval(t *testing.T, label string, ret Retriever, samples []goldenSample, 
 	recall := float64(hit) / float64(len(samples))
 	mrr := mrrSum / float64(len(samples))
 	t.Logf("=== [%s] Recall@%d = %.3f (%d/%d)  MRR = %.3f ===", label, topK, recall, hit, len(samples), mrr)
+	return evalScore{Label: label, Samples: len(samples), Hits: hit, RecallAt5: recall, MRR: mrr}
 }
 
 // TestRagAB runs A/B: legacy vs hybrid retriever against golden seed.
@@ -198,8 +207,35 @@ func TestRagAB(t *testing.T) {
 	samples := loadGoldenSet(t, "../../docs/eval/rag/golden_set_seed.jsonl")
 	t.Logf("loaded %d golden samples", len(samples))
 
-	runEval(t, "legacy", legacy, samples, 5)
-	runEval(t, "hybrid", hybrid, samples, 5)
+	scores := []evalScore{
+		runEval(t, "legacy", legacy, samples, 5),
+		runEval(t, "hybrid", hybrid, samples, 5),
+	}
+	writeScorecard(t, samples, scores)
+}
+
+func writeScorecard(t *testing.T, samples []goldenSample, scores []evalScore) {
+	dir := "../../docs/eval/reports"
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Logf("mkdir reports failed: %v", err)
+		return
+	}
+	report := map[string]any{
+		"timestamp":     time.Now().Format("2006-01-02T15:04:05Z07:00"),
+		"golden_count":  len(samples),
+		"golden_source": "docs/eval/rag/golden_set_seed.jsonl",
+		"scores":        scores,
+	}
+	body, _ := json.MarshalIndent(report, "", "  ")
+	stamp := time.Now().Format("2006-01-02-1504")
+	path := dir + "/" + stamp + ".json"
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Logf("write scorecard failed: %v", err)
+		return
+	}
+	// also overwrite latest.json for easy diff
+	_ = os.WriteFile(dir+"/latest.json", body, 0o644)
+	t.Logf("scorecard written: %s", path)
 }
 
 func getEnvOr(k, d string) string {
