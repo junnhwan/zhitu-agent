@@ -30,7 +30,7 @@ import (
 // It loads system prompt, calls Qwen ChatModel, integrates RAG retrieval,
 // manages session memory, and handles tool calls.
 type Service struct {
-	chatModel      model.ChatModel
+	chatModel      model.ToolCallingChatModel
 	systemPrompt   string
 	rag            *rag.RAG
 	docsPath       string
@@ -101,9 +101,11 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {	ctx := conte
 		return nil, fmt.Errorf("failed to create tools: %w", err)
 	}
 
-	// Bind tools to chat model
+	// Bind tools to chat model (WithTools returns a new concurrency-safe instance)
+	var boundModel model.ToolCallingChatModel = chatModel
 	if len(toolInfos) > 0 {
-		if err := chatModel.BindTools(toolInfos); err != nil {
+		boundModel, err = chatModel.WithTools(toolInfos)
+		if err != nil {
 			return nil, fmt.Errorf("failed to bind tools: %w", err)
 		}
 		log.Printf("[ChatService] bound %d tools to chat model", len(toolInfos))
@@ -142,7 +144,7 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {	ctx := conte
 			baseTools = append(baseTools, t)
 		}
 		chatWorkflow, err = workflow.NewChatWorkflow(ctx, &workflow.Deps{
-			ChatModel:     chatModel,
+			ChatModel:     boundModel,
 			Tools:         baseTools,
 			IntentRouter:  intentRouter,
 			RAG:           r,
@@ -156,7 +158,7 @@ func NewService(cfg *config.Config, r *rag.RAG) (*Service, error) {	ctx := conte
 	}
 
 	return &Service{
-		chatModel:      chatModel,
+		chatModel:      boundModel,
 		systemPrompt:   systemPrompt,
 		rag:            r,
 		docsPath:       cfg.RAG.DocsPath,
