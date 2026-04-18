@@ -1,0 +1,85 @@
+package workflow
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/flow/agent/react"
+)
+
+const (
+	nodeEnrich      = "enrich"
+	nodeRetrieve    = "retrieve"
+	nodeBuildPrompt = "build_prompt"
+	nodeReAct       = "react_agent"
+	nodeWrap        = "wrap_response"
+)
+
+type ChatWorkflow struct {
+	runnable compose.Runnable[*Request, *Response]
+}
+
+func NewChatWorkflow(ctx context.Context, deps *Deps) (*ChatWorkflow, error) {
+	if deps == nil || deps.ChatModel == nil {
+		return nil, fmt.Errorf("workflow: Deps.ChatModel is required")
+	}
+
+	maxStep := deps.MaxReActSteps
+	if maxStep <= 0 {
+		maxStep = 10
+	}
+
+	agent, err := react.NewAgent(ctx, &react.AgentConfig{
+		ToolCallingModel: deps.ChatModel,
+		ToolsConfig:      compose.ToolsNodeConfig{Tools: deps.Tools},
+		MaxStep:          maxStep,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("workflow: react agent: %w", err)
+	}
+
+	g := compose.NewGraph[*Request, *Response]()
+
+	if err := g.AddLambdaNode(nodeEnrich, enrichNode(deps)); err != nil {
+		return nil, err
+	}
+	if err := g.AddLambdaNode(nodeRetrieve, retrieveNode(deps)); err != nil {
+		return nil, err
+	}
+	if err := g.AddLambdaNode(nodeBuildPrompt, buildPromptNode(deps)); err != nil {
+		return nil, err
+	}
+
+	sub, opts := agent.ExportGraph()
+	if err := g.AddGraphNode(nodeReAct, sub, opts...); err != nil {
+		return nil, err
+	}
+	if err := g.AddLambdaNode(nodeWrap, wrapResponseNode()); err != nil {
+		return nil, err
+	}
+
+	edges := [][2]string{
+		{compose.START, nodeEnrich},
+		{nodeEnrich, nodeRetrieve},
+		{nodeRetrieve, nodeBuildPrompt},
+		{nodeBuildPrompt, nodeReAct},
+		{nodeReAct, nodeWrap},
+		{nodeWrap, compose.END},
+	}
+	for _, e := range edges {
+		if err := g.AddEdge(e[0], e[1]); err != nil {
+			return nil, fmt.Errorf("workflow: edge %s -> %s: %w", e[0], e[1], err)
+		}
+	}
+
+	r, err := g.Compile(ctx, compose.WithMaxRunSteps(maxStep+10))
+	if err != nil {
+		return nil, fmt.Errorf("workflow: compile: %w", err)
+	}
+	return &ChatWorkflow{runnable: r}, nil
+}
+
+func (w *ChatWorkflow) Invoke(ctx context.Context, req *Request) (*Response, error) {
+	return w.runnable.Invoke(ctx, req)
+}
