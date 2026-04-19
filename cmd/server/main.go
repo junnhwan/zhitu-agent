@@ -16,6 +16,7 @@ import (
 	"github.com/zhitu-agent/zhitu-agent/internal/chat"
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
 	"github.com/zhitu-agent/zhitu-agent/internal/handler"
+	mcpserver "github.com/zhitu-agent/zhitu-agent/internal/mcp/server"
 	"github.com/zhitu-agent/zhitu-agent/internal/middleware"
 	"github.com/zhitu-agent/zhitu-agent/internal/monitor"
 	"github.com/zhitu-agent/zhitu-agent/internal/rag"
@@ -85,6 +86,37 @@ func main() {
 		log.Println("Prometheus metrics endpoint enabled at /metrics")
 	}
 
+	// MCP Server endpoint (optional, bearer-guarded)
+	var mcpSrv *mcpserver.Server
+	if cfg.MCP.Server.Enabled {
+		if cfg.MCP.Server.AuthToken == "" {
+			log.Fatal("mcp.server.enabled=true requires mcp.server.auth_token (or ZHU_MCP_SERVER_AUTH_TOKEN env)")
+		}
+		if ragSystem == nil {
+			log.Fatal("mcp.server.enabled=true requires RAG to be initialized")
+		}
+		mcpTools, err := mcpserver.DefaultTools(ragSystem, cfg)
+		if err != nil {
+			log.Fatalf("Failed to build MCP server tools: %v", err)
+		}
+		mcpSrv, err = mcpserver.New(ctx, cfg.MCP.Server, mcpTools, mcpserver.Hooks{
+			OnToolsRegistered: monitor.DefaultRegistry.AiMetrics.SetMCPServerToolsCount,
+			OnCall:            monitor.DefaultRegistry.AiMetrics.RecordMCPServerCall,
+		})
+		if err != nil {
+			log.Fatalf("Failed to build MCP server: %v", err)
+		}
+		mcpPath := cfg.MCP.Server.Path
+		if mcpPath == "" {
+			mcpPath = "/mcp"
+		}
+		r.Any(mcpPath,
+			middleware.BearerAuth(cfg.MCP.Server.AuthToken, monitor.DefaultRegistry.AiMetrics.RecordMCPServerUnauth),
+			gin.WrapH(mcpSrv.Handler()),
+		)
+		log.Printf("MCP Server endpoint enabled at %s (tools=%d)", mcpPath, len(mcpSrv.Tools()))
+	}
+
 	// Static files — mirrors Java static resources
 	r.StaticFile("/chat", "./static/gpt.html")
 	r.StaticFile("/gpt.html", "./static/gpt.html")
@@ -112,6 +144,18 @@ func main() {
 	<-quit
 
 	log.Println("Shutting down server...")
+
+	// Shutdown MCP server (closes sse sweeper)
+	if mcpSrv != nil {
+		if err := mcpSrv.Shutdown(ctx); err != nil {
+			log.Printf("MCP server shutdown error: %v", err)
+		}
+	}
+
+	// Shutdown chat service (closes MCP client connections)
+	if err := chatService.Shutdown(); err != nil {
+		log.Printf("Chat service shutdown error: %v", err)
+	}
 
 	// Shutdown RAG
 	if ragSystem != nil {

@@ -94,3 +94,10 @@ mcp:
       #   url: "https://mcp.internal/jira/sse"
       #   enabled: true
       #   timeout_ms: 5000
+  server:
+    enabled: false
+    path: /mcp
+    # auth_token must be set via ZHU_MCP_SERVER_AUTH_TOKEN env or here when enabled.
+    # Exposes getCurrentTime / addKnowledgeToRag / retrieveKnowledge to external MCP clients
+    # (e.g. Claude Desktop) over Streamable HTTP with bearer auth. sendEmail 不暴露。
+    auth_token: ""

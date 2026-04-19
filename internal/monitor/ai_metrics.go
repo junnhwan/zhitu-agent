@@ -23,6 +23,10 @@ type AiMetrics struct {
 	mcpToolsGauge       *prometheus.GaugeVec
 	mcpCalls            *prometheus.CounterVec
 	mcpCallDuration     *prometheus.HistogramVec
+	mcpServerToolsGauge prometheus.Gauge
+	mcpServerCalls      *prometheus.CounterVec
+	mcpServerCallDur    *prometheus.HistogramVec
+	mcpServerUnauth     prometheus.Counter
 
 	counterCache map[string]prometheus.Counter
 	timerCache   map[string]prometheus.Observer
@@ -99,6 +103,25 @@ func NewAiMetrics(registry *prometheus.Registry) *AiMetrics {
 	}, []string{"server", "tool"})
 	registry.MustRegister(m.mcpToolsGauge, m.mcpCalls, m.mcpCallDuration)
 
+	m.mcpServerToolsGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "mcp_server_tools_total",
+		Help: "MCP Server 对外暴露的工具数量",
+	})
+	m.mcpServerCalls = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "mcp_server_calls_total",
+		Help: "MCP Server 被调用次数（status=success|error）",
+	}, []string{"tool", "status"})
+	m.mcpServerCallDur = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "mcp_server_call_duration_seconds",
+		Help:    "MCP Server 工具调用端到端耗时",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"tool"})
+	m.mcpServerUnauth = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "mcp_server_unauth_total",
+		Help: "MCP Server 鉴权失败次数",
+	})
+	registry.MustRegister(m.mcpServerToolsGauge, m.mcpServerCalls, m.mcpServerCallDur, m.mcpServerUnauth)
+
 	return m
 }
 
@@ -109,6 +132,19 @@ func (m *AiMetrics) SetMCPToolsCount(server string, n int) {
 func (m *AiMetrics) RecordMCPCall(server, toolName, status string, d time.Duration) {
 	m.mcpCalls.WithLabelValues(server, toolName, status).Inc()
 	m.mcpCallDuration.WithLabelValues(server, toolName).Observe(d.Seconds())
+}
+
+func (m *AiMetrics) SetMCPServerToolsCount(n int) {
+	m.mcpServerToolsGauge.Set(float64(n))
+}
+
+func (m *AiMetrics) RecordMCPServerCall(toolName, status string, d time.Duration) {
+	m.mcpServerCalls.WithLabelValues(toolName, status).Inc()
+	m.mcpServerCallDur.WithLabelValues(toolName).Observe(d.Seconds())
+}
+
+func (m *AiMetrics) RecordMCPServerUnauth() {
+	m.mcpServerUnauth.Inc()
 }
 
 func (m *AiMetrics) RecordRAGChannelFailed(name string) {

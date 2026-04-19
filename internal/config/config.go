@@ -148,6 +148,13 @@ type ChatConfig struct {
 
 type MCPConfig struct {
 	Client MCPClientConfig `mapstructure:"client"`
+	Server MCPServerSideConfig `mapstructure:"server"`
+}
+
+type MCPServerSideConfig struct {
+	Enabled   bool   `mapstructure:"enabled"`
+	Path      string `mapstructure:"path"`
+	AuthToken string `mapstructure:"auth_token"`
 }
 
 type MCPClientConfig struct {
@@ -251,6 +258,8 @@ func setDefaults(v *viper.Viper) {
 
 	// MCP
 	v.SetDefault("mcp.client.enabled", false)
+	v.SetDefault("mcp.server.enabled", false)
+	v.SetDefault("mcp.server.path", "/mcp")
 }
 
 func overrideFromEnv(cfg *Config) {
@@ -303,5 +312,8 @@ func overrideFromEnv(cfg *Config) {
 	if v := os.Getenv("GUARDRAIL_SENSITIVE_WORDS"); v != "" {
 		// Stored as comma-separated, parsed in middleware
 		_ = v
+	}
+	if v := os.Getenv("ZHU_MCP_SERVER_AUTH_TOKEN"); v != "" {
+		cfg.MCP.Server.AuthToken = v
 	}
 }
