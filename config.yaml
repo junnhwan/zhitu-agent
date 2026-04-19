@@ -94,6 +94,19 @@ mcp:
       #   url: "https://mcp.internal/jira/sse"
       #   enabled: true
       #   timeout_ms: 5000
+      # 智谱 Web Search（对齐 Java McpToolConfig.java 的 BigModelSearchMcpClient）
+      # 注入一个 web_search tool，模型可主动查互联网。
+      # - name: bigmodel-search
+      #   transport: sse
+      #   url: "https://open.bigmodel.cn/api/mcp/web_search/sse?Authorization=${BIGMODEL_API_KEY}"
+      #   enabled: true
+      #   timeout_ms: 10000
+      # 本地 time（对齐 Java timeClient，避免和内置 getCurrentTime 名冲突时自动加前缀）
+      # - name: mcp-time
+      #   transport: stdio
+      #   command: ["uvx", "mcp-server-time", "--local-timezone=Asia/Shanghai"]
+      #   enabled: true
+      #   timeout_ms: 10000
   server:
     enabled: false
     path: /mcp

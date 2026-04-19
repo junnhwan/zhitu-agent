@@ -96,3 +96,57 @@ func TestLoadMissingFile(t *testing.T) {
 		t.Error("Load() should return error for missing file")
 	}
 }
+
+func TestLoadMCPClientURLEnvExpansion(t *testing.T) {
+	content := `
+server:
+  port: 10010
+redis:
+  host: 127.0.0.1
+  port: 6379
+mcp:
+  client:
+    enabled: true
+    servers:
+      - name: bigmodel-search
+        transport: sse
+        url: "https://open.bigmodel.cn/api/mcp/web_search/sse?Authorization=${BIGMODEL_API_KEY_TEST}"
+        enabled: true
+      - name: stdio-with-env
+        transport: stdio
+        command: ["sh"]
+        env:
+          FOO: "prefix-${MCP_TEST_FOO}-suffix"
+`
+	tmpFile, err := os.CreateTemp("", "config-mcp-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.WriteString(content); err != nil {
+		t.Fatal(err)
+	}
+	tmpFile.Close()
+
+	os.Setenv("BIGMODEL_API_KEY_TEST", "secret-xyz")
+	os.Setenv("MCP_TEST_FOO", "bar")
+	defer os.Unsetenv("BIGMODEL_API_KEY_TEST")
+	defer os.Unsetenv("MCP_TEST_FOO")
+
+	cfg, err := Load(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if len(cfg.MCP.Client.Servers) != 2 {
+		t.Fatalf("servers len=%d, want 2", len(cfg.MCP.Client.Servers))
+	}
+	wantURL := "https://open.bigmodel.cn/api/mcp/web_search/sse?Authorization=secret-xyz"
+	if cfg.MCP.Client.Servers[0].URL != wantURL {
+		t.Errorf("url=%q, want %q", cfg.MCP.Client.Servers[0].URL, wantURL)
+	}
+	if cfg.MCP.Client.Servers[1].Env["foo"] != "prefix-bar-suffix" {
+		// viper lowercases map keys; downstream MCP client must use the
+		// lowercased key when constructing stdio env (see types.MCPServerConfig.Env).
+		t.Errorf("env foo=%q, want prefix-bar-suffix", cfg.MCP.Client.Servers[1].Env["foo"])
+	}
+}

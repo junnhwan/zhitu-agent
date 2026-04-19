@@ -316,4 +316,13 @@ func overrideFromEnv(cfg *Config) {
 	if v := os.Getenv("ZHU_MCP_SERVER_AUTH_TOKEN"); v != "" {
 		cfg.MCP.Server.AuthToken = v
 	}
+
+	// Expand ${ENV_VAR} / $ENV_VAR in MCP client server URLs and env values so
+	// API keys (e.g. BigModel web_search) don't need to be committed in config.yaml.
+	for i := range cfg.MCP.Client.Servers {
+		cfg.MCP.Client.Servers[i].URL = os.ExpandEnv(cfg.MCP.Client.Servers[i].URL)
+		for k, val := range cfg.MCP.Client.Servers[i].Env {
+			cfg.MCP.Client.Servers[i].Env[k] = os.ExpandEnv(val)
+		}
+	}
 }

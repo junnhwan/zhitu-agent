@@ -80,10 +80,14 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	// Prometheus metrics endpoint — mirrors Java Micrometer /metrics
+	// Prometheus metrics endpoint — mirrors Java Micrometer /metrics,
+	// plus the /actuator/prometheus alias so Prometheus scrape configs
+	// aimed at the Java original can hit the Go replica unchanged.
 	if cfg.Monitoring.Prometheus.Enabled {
-		r.GET("/metrics", gin.WrapH(promhttp.HandlerFor(monitor.DefaultRegistry.Prometheus, promhttp.HandlerOpts{})))
-		log.Println("Prometheus metrics endpoint enabled at /metrics")
+		promHandler := gin.WrapH(promhttp.HandlerFor(monitor.DefaultRegistry.Prometheus, promhttp.HandlerOpts{}))
+		r.GET("/metrics", promHandler)
+		r.GET("/actuator/prometheus", promHandler)
+		log.Println("Prometheus metrics endpoint enabled at /metrics (alias /actuator/prometheus)")
 	}
 
 	// MCP Server endpoint (optional, bearer-guarded)
@@ -120,6 +124,8 @@ func main() {
 	// Static files — mirrors Java static resources
 	r.StaticFile("/chat", "./static/gpt.html")
 	r.StaticFile("/gpt.html", "./static/gpt.html")
+	r.StaticFile("/qwen.html", "./static/qwen.html")
+	r.StaticFile("/gemini.html", "./static/gemini.html")
 	r.StaticFile("/ai.png", "./static/ai.png")
 	r.StaticFile("/user.png", "./static/user.png")
 
