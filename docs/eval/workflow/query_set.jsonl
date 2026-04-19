@@ -1,0 +1,40 @@
+{"id":"k01","category":"knowledge","query":"什么是 RAG，核心流程有哪些"}
+{"id":"k02","category":"knowledge","query":"向量检索和 BM25 检索各自擅长什么场景"}
+{"id":"k03","category":"knowledge","query":"rerank 模型一般怎么部署，候选数量多少合适"}
+{"id":"k04","category":"knowledge","query":"Eino Graph 的 ReAct Agent 是做什么的"}
+{"id":"k05","category":"knowledge","query":"MCP 协议是什么，Client 和 Server 各自负责什么"}
+{"id":"k06","category":"knowledge","query":"Go 中 sync.Map 和 sync.RWMutex+map 哪个更适合读多写少"}
+{"id":"k07","category":"knowledge","query":"Redis Stack 的 RediSearch 怎么做向量检索"}
+{"id":"k08","category":"knowledge","query":"qwen3-rerank 模型的输入输出格式是怎样的"}
+{"id":"k09","category":"knowledge","query":"如何评估一个 RAG 系统的检索质量"}
+{"id":"k10","category":"knowledge","query":"chunking 的策略有几种，每种的优劣"}
+{"id":"k11","category":"knowledge","query":"text-embedding-v3 支持哪些维度，中文效果如何"}
+{"id":"k12","category":"knowledge","query":"RRF 融合算法怎么工作的"}
+{"id":"k13","category":"knowledge","query":"为什么需要对对话历史做压缩"}
+{"id":"k14","category":"knowledge","query":"Prometheus 和 Grafana 在监控链路里分别扮演什么角色"}
+{"id":"k15","category":"knowledge","query":"智途项目为什么选 Go + Eino 组合"}
+{"id":"k16","category":"knowledge","query":"怎么防止 LLM 工具调用时产生幻觉参数"}
+{"id":"k17","category":"knowledge","query":"分布式锁为什么要用 Lua 脚本释放"}
+{"id":"k18","category":"knowledge","query":"检索增强和 fine-tune 各自的适用场景"}
+{"id":"k19","category":"knowledge","query":"向量数据库选型考虑哪些维度"}
+{"id":"k20","category":"knowledge","query":"Eino 的 compose.Graph 和 Runnable 是什么关系"}
+{"id":"t01","category":"tool","query":"现在几点了"}
+{"id":"t02","category":"tool","query":"今天是星期几"}
+{"id":"t03","category":"tool","query":"帮我查一下项目里关于 MCP Server 的内容"}
+{"id":"t04","category":"tool","query":"检索一下关于记忆压缩策略的文档"}
+{"id":"t05","category":"tool","query":"我想把这条知识加到知识库：问题是 RAG 的完整形式是什么，答案是 Retrieval-Augmented Generation，文件名 glossary.md"}
+{"id":"t06","category":"tool","query":"请查询 RRF 相关的知识点"}
+{"id":"t07","category":"tool","query":"当前北京时间告诉我一下"}
+{"id":"t08","category":"tool","query":"帮我搜一下混合检索的设计资料"}
+{"id":"t09","category":"tool","query":"告诉我现在的日期和时间"}
+{"id":"t10","category":"tool","query":"把这个知识记下来：问题是 Eino 版本怎么选，答案是用 0.8.9 兼容 eino-ext 0.1.8，文件名 version-matrix.md"}
+{"id":"c01","category":"chitchat","query":"你好"}
+{"id":"c02","category":"chitchat","query":"你是谁"}
+{"id":"c03","category":"chitchat","query":"讲个笑话"}
+{"id":"c04","category":"chitchat","query":"你能做什么"}
+{"id":"c05","category":"chitchat","query":"谢谢"}
+{"id":"c06","category":"chitchat","query":"1+1 等于几"}
+{"id":"c07","category":"chitchat","query":"用一句话介绍一下自己"}
+{"id":"c08","category":"chitchat","query":"简单说说你怎么工作的"}
+{"id":"c09","category":"chitchat","query":"再见"}
+{"id":"c10","category":"chitchat","query":"帮我想一个鼓励的句子"}
