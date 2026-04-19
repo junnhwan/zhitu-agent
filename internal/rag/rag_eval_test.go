@@ -14,6 +14,7 @@ import (
 
 	_ "github.com/joho/godotenv/autoload"
 
+	"github.com/cloudwego/eino/schema"
 	"github.com/joho/godotenv"
 
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
@@ -25,7 +26,8 @@ import (
 
 type goldenSample struct {
 	Query            string   `json:"query"`
-	RelevantKeywords []string `json:"relevant_keywords"`
+	RelevantKeywords []string `json:"relevant_keywords,omitempty"`
+	RelevantDocIDs   []string `json:"relevant_doc_ids,omitempty"`
 }
 
 func loadGoldenSet(t *testing.T, path string) []goldenSample {
@@ -51,17 +53,30 @@ func loadGoldenSet(t *testing.T, path string) []goldenSample {
 	return out
 }
 
-// sampleHit returns true if every relevant keyword appears (case-insensitive substring)
-// in at least one of the top-k retrieved doc contents.
-func sampleHit(docs []string, keywords []string) bool {
-	if len(keywords) == 0 {
+// sampleHit returns true if the retrieved docs satisfy the sample's relevance criteria.
+// 判据优先级：relevant_doc_ids > relevant_keywords。
+//   - relevant_doc_ids 非空：只要有一个检索 doc.ID 以任一 relevant_doc_id 为前缀即命中
+//     （前缀匹配是为了兼容切片粒度——relevant_doc_id 通常是 relpath，实际 ID 是 relpath_N）
+//   - 否则回退关键词子串匹配：所有关键词都在某个 doc.Content 中出现才算命中
+func sampleHit(docs []*schema.Document, sample goldenSample) bool {
+	if len(sample.RelevantDocIDs) > 0 {
+		for _, d := range docs {
+			for _, rid := range sample.RelevantDocIDs {
+				if docIDMatches(d.ID, rid) {
+					return true
+				}
+			}
+		}
 		return false
 	}
-	for _, kw := range keywords {
+	if len(sample.RelevantKeywords) == 0 {
+		return false
+	}
+	for _, kw := range sample.RelevantKeywords {
 		kwL := strings.ToLower(kw)
 		found := false
-		for _, c := range docs {
-			if strings.Contains(strings.ToLower(c), kwL) {
+		for _, d := range docs {
+			if strings.Contains(strings.ToLower(d.Content), kwL) {
 				found = true
 				break
 			}
@@ -71,6 +86,14 @@ func sampleHit(docs []string, keywords []string) bool {
 		}
 	}
 	return true
+}
+
+// docIDMatches 用前缀语义对比两个 doc_id，相等或 "relpath" 作为 "relpath_N" 的前缀都算 match。
+func docIDMatches(actual, want string) bool {
+	if actual == want {
+		return true
+	}
+	return strings.HasPrefix(actual, want+"_")
 }
 
 type evalScore struct {
@@ -94,16 +117,13 @@ func runEval(t *testing.T, label string, ret Retriever, samples []goldenSample, 
 		if k > topK {
 			k = topK
 		}
-		contents := make([]string, k)
-		for i := 0; i < k; i++ {
-			contents[i] = docs[i].Content
-		}
-		if sampleHit(contents, s.RelevantKeywords) {
+		top := docs[:k]
+		if sampleHit(top, s) {
 			hit++
 		}
-		// MRR: 取包含全部关键词的最小 rank
+		// MRR: 取满足判据的单 doc 最小 rank
 		for i := 0; i < k; i++ {
-			if sampleHit([]string{contents[i]}, s.RelevantKeywords) {
+			if sampleHit([]*schema.Document{top[i]}, s) {
 				mrrSum += 1.0 / float64(i+1)
 				break
 			}
@@ -220,11 +240,24 @@ func writeScorecard(t *testing.T, samples []goldenSample, scores []evalScore) {
 		t.Logf("mkdir reports failed: %v", err)
 		return
 	}
+	docIDSamples, kwSamples := 0, 0
+	for _, s := range samples {
+		if len(s.RelevantDocIDs) > 0 {
+			docIDSamples++
+		} else if len(s.RelevantKeywords) > 0 {
+			kwSamples++
+		}
+	}
 	report := map[string]any{
 		"timestamp":     time.Now().Format("2006-01-02T15:04:05Z07:00"),
 		"golden_count":  len(samples),
 		"golden_source": "docs/eval/rag/golden_set_seed.jsonl",
-		"scores":        scores,
+		"judgment": map[string]int{
+			"by_doc_id":   docIDSamples,
+			"by_keyword":  kwSamples,
+			"unlabelled":  len(samples) - docIDSamples - kwSamples,
+		},
+		"scores": scores,
 	}
 	body, _ := json.MarshalIndent(report, "", "  ")
 	stamp := time.Now().Format("2006-01-02-1504")
@@ -235,7 +268,7 @@ func writeScorecard(t *testing.T, samples []goldenSample, scores []evalScore) {
 	}
 	// also overwrite latest.json for easy diff
 	_ = os.WriteFile(dir+"/latest.json", body, 0o644)
-	t.Logf("scorecard written: %s", path)
+	t.Logf("scorecard written: %s (by_doc_id=%d, by_keyword=%d)", path, docIDSamples, kwSamples)
 }
 
 func getEnvOr(k, d string) string {
