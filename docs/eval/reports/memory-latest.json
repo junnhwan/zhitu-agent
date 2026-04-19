@@ -1,0 +1,80 @@
+{
+  "timestamp": "2026-04-19T11:20:32+08:00",
+  "golden_source": "docs/eval/memory/conversation_seed.jsonl",
+  "template_count": 5,
+  "llm_judge_enabled": false,
+  "strategies": [
+    {
+      "strategy": "simple",
+      "status": "ok",
+      "templates": [
+        {
+          "template_id": "short_chat",
+          "triggered": false,
+          "original_count": 6,
+          "compressed_count": 6,
+          "original_tokens": 29,
+          "compressed_tokens": 29,
+          "compression_ratio": 1,
+          "recent_fidelity": true
+        },
+        {
+          "template_id": "medium_task",
+          "triggered": true,
+          "original_count": 12,
+          "compressed_count": 11,
+          "original_tokens": 140,
+          "compressed_tokens": 136,
+          "compression_ratio": 0.9714,
+          "recent_fidelity": true
+        },
+        {
+          "template_id": "long_mixed",
+          "triggered": true,
+          "original_count": 20,
+          "compressed_count": 11,
+          "original_tokens": 258,
+          "compressed_tokens": 140,
+          "compression_ratio": 0.5426,
+          "recent_fidelity": true
+        },
+        {
+          "template_id": "facts_bio",
+          "triggered": true,
+          "original_count": 16,
+          "compressed_count": 11,
+          "original_tokens": 154,
+          "compressed_tokens": 133,
+          "compression_ratio": 0.8636,
+          "recent_fidelity": true
+        },
+        {
+          "template_id": "rag_tool_result",
+          "triggered": false,
+          "original_count": 10,
+          "compressed_count": 10,
+          "original_tokens": 331,
+          "compressed_tokens": 331,
+          "compression_ratio": 1,
+          "recent_fidelity": true
+        }
+      ],
+      "aggregate": {
+        "avg_ratio_when_triggered": 0.7925,
+        "recent_fidelity_rate": 1,
+        "triggered_count": 3,
+        "triggered_rate": 0.6
+      }
+    },
+    {
+      "strategy": "llm_summary",
+      "status": "skipped",
+      "skipped_reason": "DASHSCOPE_API_KEY / QWEN_API_KEY not set"
+    },
+    {
+      "strategy": "hybrid",
+      "status": "skipped",
+      "skipped_reason": "DASHSCOPE_API_KEY / QWEN_API_KEY not set"
+    }
+  ]
+}
