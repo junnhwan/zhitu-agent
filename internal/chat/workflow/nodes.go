@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 
@@ -48,30 +49,43 @@ func retrieveFn(deps *Deps) func(context.Context, *enriched) (*enriched, error) 
 
 func buildPromptFn(deps *Deps) func(context.Context, *enriched) ([]*schema.Message, error) {
 	return func(ctx context.Context, e *enriched) ([]*schema.Message, error) {
-		msgs := make([]*schema.Message, 0, len(e.Request.History)+3)
+		// 对齐 legacy service.go:495-510 的 RAG 注入模板：
+		// 独立 UserMessage 承载参考知识 + 每条带【来源 | 相似度】元数据 +
+		// 假 AssistantMessage ack，让 LLM 进入"已读消化"态而非"裸拼接问答"态。
+		// 缺了这套结构 graph 在 knowledge 类比 legacy 短 10%（见
+		// docs/eval/reports/workflow-knowledge-gap-analysis.md）。
+		msgs := make([]*schema.Message, 0, len(e.Request.History)+4)
 		if deps.SystemPrompt != "" {
 			msgs = append(msgs, schema.SystemMessage(deps.SystemPrompt))
 		}
 		msgs = append(msgs, e.Request.History...)
 
-		userContent := e.Query
 		if len(e.RAGDocs) > 0 {
-			var b strings.Builder
-			b.WriteString("参考知识：\n")
-			for i, d := range e.RAGDocs {
-				b.WriteString(d.Content)
-				if i < len(e.RAGDocs)-1 {
-					b.WriteString("\n---\n")
-				}
-			}
-			b.WriteString("\n\n用户问题：")
-			b.WriteString(e.Query)
-			userContent = b.String()
+			msgs = append(msgs, schema.UserMessage(formatRAGContext(e.RAGDocs)))
+			msgs = append(msgs, schema.AssistantMessage("好的，我已了解相关知识，请继续提问。", nil))
 		}
-		msgs = append(msgs, schema.UserMessage(userContent))
+		msgs = append(msgs, schema.UserMessage(e.Query))
 		e.Messages = msgs
 		return msgs, nil
 	}
+}
+
+func formatRAGContext(docs []*schema.Document) string {
+	var b strings.Builder
+	b.WriteString("参考知识：\n")
+	for i, d := range docs {
+		fileName := "未知文件"
+		if v, ok := d.MetaData["file_name"]; ok {
+			if fn, ok := v.(string); ok && fn != "" {
+				fileName = fn
+			}
+		}
+		fmt.Fprintf(&b, "【来源：%s | 相似度：%.2f】\n%s", fileName, d.Score(), d.Content)
+		if i < len(docs)-1 {
+			b.WriteString("\n\n---\n\n")
+		}
+	}
+	return b.String()
 }
 
 func wrapResponseFn() func(context.Context, *schema.Message) (*Response, error) {

@@ -93,6 +93,7 @@ func NewStore(ctx context.Context, cfg *config.Config, needsTokenized bool) (*St
 		ReturnFields: []string{
 			"content",
 			"vector_content",
+			"file_name",
 			redisretriever.SortByDistanceAttributeName,
 		},
 		DocumentConverter: vectorScoreConverter,
