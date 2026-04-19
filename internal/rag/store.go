@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 
 	"github.com/cloudwego/eino-ext/components/embedding/dashscope"
 	redisindexer "github.com/cloudwego/eino-ext/components/indexer/redis"
 	redisretriever "github.com/cloudwego/eino-ext/components/retriever/redis"
+	"github.com/cloudwego/eino/schema"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/zhitu-agent/zhitu-agent/internal/config"
@@ -78,13 +80,23 @@ func NewStore(ctx context.Context, cfg *config.Config, needsTokenized bool) (*St
 		return nil, fmt.Errorf("failed to create redis indexer: %w", err)
 	}
 
-	// 5. Create Redis retriever
+	// 5. Create Redis retriever.
+	// 注：eino redisretriever 内部 FT.SEARCH 用 WithScores:false，要拿相关性
+	// 必须把 KNN 的 distance 字段加进 ReturnFields，再在 DocumentConverter 里
+	// 转成 score = 1 - distance（cosine 距离 → 相似度），否则 doc.Score() 永远 0，
+	// 下游 base_retriever.min_score / vector_channel.min_score 全部失效（0 命中）。
 	topK := cfg.RAG.BaseRetriever.MaxResults
 	retriever, err := redisretriever.NewRetriever(ctx, &redisretriever.RetrieverConfig{
-		Client:   rdb,
-		Index:    redisIndexName,
-		TopK:     topK,
-		Embedding: embedder,
+		Client: rdb,
+		Index:  redisIndexName,
+		TopK:   topK,
+		ReturnFields: []string{
+			"content",
+			"vector_content",
+			redisretriever.SortByDistanceAttributeName,
+		},
+		DocumentConverter: vectorScoreConverter,
+		Embedding:         embedder,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create redis retriever: %w", err)
@@ -159,4 +171,33 @@ func createIndex(ctx context.Context, rdb *redis.Client, indexName, keyPrefix st
 		&redis.FTCreateOptions{OnHash: true, Prefix: []interface{}{keyPrefix}},
 		args...,
 	).Err()
+}
+
+// vectorScoreConverter parses the FT.SEARCH KNN result, capturing the
+// distance-as-attribute and converting cosine distance ∈ [0,2] into a
+// similarity score ∈ [-1,1] via score = 1 - distance, written via WithScore
+// so downstream min_score filters work.
+func vectorScoreConverter(_ context.Context, doc redis.Document) (*schema.Document, error) {
+	resp := &schema.Document{
+		ID:       doc.ID,
+		MetaData: map[string]any{},
+	}
+	for k, v := range doc.Fields {
+		switch k {
+		case "content":
+			resp.Content = v
+		case "vector_content":
+			resp.WithDenseVector(redisretriever.Bytes2Vector([]byte(v)))
+		case redisretriever.SortByDistanceAttributeName:
+			d, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				return nil, fmt.Errorf("parse distance %q: %w", v, err)
+			}
+			resp.WithScore(1 - d)
+			resp.MetaData["distance"] = d
+		default:
+			resp.MetaData[k] = v
+		}
+	}
+	return resp, nil
 }
